@@ -1,0 +1,413 @@
+{
+  "id": 4,
+  "title": "Retrieval",
+  "subtitle": "Top-k, BM25, Hybrid und MMR",
+  "icon": "🔎",
+  "color": "#f5b942",
+  "theory": [
+    {
+      "heading": "Top-k Retrieval",
+      "body_md": "Beim Retrieval werden die **k ähnlichsten Chunks** zur Frage zurückgegeben. Die Wahl von *k* ist ein Trade-off zwischen **Recall** (alles Relevante dabei?) und **Precision** (wie viel Rauschen?).\n\n- *k* zu klein: Der relevante Chunk fehlt → das LLM halluziniert oder lehnt ab.\n- *k* zu groß: Viel irrelevanter Kontext → höhere Kosten, Ablenkung, „Lost in the Middle“.\n\nFaustregel: Retrieval mit höherem *k* (z. B. 20–50), danach **reranken** und nur die besten 3–8 an das LLM geben (Level 5).\n\nViele Systeme kombinieren top-k mit einem **Score-Schwellwert**: Chunks unterhalb einer minimalen Ähnlichkeit werden verworfen – auch wenn dadurch weniger als *k* übrig bleiben. Das ist die Grundlage für Abstain.",
+      "key_points": [
+        "k steuert Recall vs. Precision.",
+        "Breit abrufen, dann reranken.",
+        "Score-Schwellen verhindern Kontext aus irrelevanten Treffern."
+      ],
+      "visual": "pipeline"
+    },
+    {
+      "heading": "BM25: Stichwortsuche, die funktioniert",
+      "body_md": "**BM25** ist der Standard der lexikalischen Suche. Für jeden Suchbegriff *t* im Dokument *d*:\n\n```\nscore(d) = Σ_t IDF(t) · f(t,d)·(k1 + 1) / ( f(t,d) + k1·(1 − b + b·|d|/avgdl) )\n```\n\n- **IDF**: seltene Wörter („Retry-After“) zählen mehr als häufige („NovaCloud“).\n- **Sättigung** über *k₁* (typisch 1,2–2,0): Das zehnte Vorkommen eines Wortes bringt kaum mehr als das dritte.\n- **Längennormierung** über *b* (typisch 0,75): Lange Dokumente werden nicht automatisch bevorzugt.\n\nIm Unterschied zu reinem TF-IDF hat BM25 also eingebaute Sättigung und Längennormierung. Schwächen: keine Synonyme, empfindlich gegenüber Flexion („Zahlung“ ≠ „Zahlungen“) – deshalb Stemming oder Lemmatisierung, gerade im Deutschen mit seinen Komposita.",
+      "key_points": [
+        "IDF gewichtet seltene Begriffe hoch.",
+        "k₁ = Sättigung, b = Längennormierung.",
+        "Deutsch: Stemming und Komposita beachten."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Hybrid-Suche und Reciprocal Rank Fusion",
+      "body_md": "Hybrid-Suche führt BM25 und Dense-Retrieval parallel aus und **fusioniert** die Ranglisten. Da die Scores unterschiedlich skaliert sind, nutzt man meist **Reciprocal Rank Fusion (RRF)** – sie verwendet nur die Ränge:\n\n```python\ndef rrf(rankings, k=60):\n    scores = {}\n    for ranking in rankings:            # z. B. [bm25_ids, dense_ids]\n        for rank, doc_id in enumerate(ranking, start=1):\n            scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank)\n    return sorted(scores, key=scores.get, reverse=True)\n```\n\nDie Konstante *k = 60* dämpft den Einfluss der Spitzenplätze. Ein Dokument, das in **beiden** Listen weit oben steht, gewinnt.\n\nAlternative: gewichtete Summe normalisierter Scores (`α·dense + (1−α)·bm25`) – flexibler, aber empfindlich für Score-Normierung.",
+      "key_points": [
+        "Hybrid = lexikalisch + semantisch.",
+        "RRF fusioniert Ränge, nicht Scores.",
+        "Treffer in beiden Listen gewinnen."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "MMR: Relevanz und Vielfalt",
+      "body_md": "Oft sind die top-k Treffer fast identisch – etwa vier Versionen desselben Preisblatts. **Maximal Marginal Relevance (MMR)** wählt iterativ den Chunk, der relevant **und** möglichst verschieden von den bereits gewählten ist:\n\n```\nMMR(d) = λ · sim(q, d) − (1 − λ) · max_{s ∈ S} sim(d, s)\n```\n\n- λ = 1: reine Relevanz (wie normales top-k)\n- λ = 0: reine Vielfalt\n- typisch: λ ≈ 0,5–0,8\n\n**Achtung:** MMR ist kein Freshness-Filter. Es kann einen veralteten Chunk wählen, *weil* er sich vom aktuellen unterscheidet. Gegen veraltete Versionen helfen Metadaten (Level 9).",
+      "key_points": [
+        "MMR balanciert Relevanz und Vielfalt über λ.",
+        "Hilft gegen Duplikate in den top-k.",
+        "Ersetzt keine Versionierung."
+      ],
+      "visual": "vectorspace"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l04t01",
+      "type": "quiz",
+      "title": "BM25-Parameter",
+      "prompt": "Was bewirkt der Parameter **b** in BM25?",
+      "xp": 15,
+      "difficulty": 1,
+      "explanation": "Siehe *BM25: Stichwortsuche, die funktioniert*.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Er bestimmt, wie stark seltene Wörter gewichtet werden."
+        },
+        {
+          "id": "b",
+          "text": "Er normiert den Score nach Dokumentlänge."
+        },
+        {
+          "id": "c",
+          "text": "Er legt die Anzahl der Treffer fest."
+        },
+        {
+          "id": "d",
+          "text": "Er bestimmt die Sättigung der Termfrequenz."
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "b"
+        ],
+        "option_explanations": {
+          "a": "Das macht die IDF.",
+          "b": "Richtig – b = 0: keine Längennormierung, b = 1: volle Normierung.",
+          "c": "Das ist k (top-k), kein BM25-Parameter.",
+          "d": "Das ist k₁."
+        }
+      }
+    },
+    {
+      "id": "l04t02",
+      "type": "code",
+      "title": "Reciprocal Rank Fusion",
+      "prompt": "Vervollständige die RRF-Funktion.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Jeder Rang trägt `1/(k + rank)` bei; höchste Summe zuerst, also `reverse=True`.",
+      "language": "python",
+      "template": "def rrf(rankings, k=60):\n    scores = {}\n    for ranking in rankings:\n        for rank, doc_id in enumerate(ranking, start=1):\n            scores[doc_id] = scores.get(doc_id, 0) + {{1}}\n    return sorted(scores, key=scores.get, reverse={{2}})",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Beitrag eines Rangs"
+        },
+        {
+          "id": "2",
+          "placeholder": "Sortierrichtung"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "1 / (k + rank)",
+            "1/(k+rank)",
+            "1.0 / (k + rank)",
+            "1 / (rank + k)"
+          ],
+          "2": [
+            "True"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l04t03",
+      "type": "tune",
+      "title": "Rate-Limit-Frage",
+      "prompt": "Frage: **„Wie viele Anfragen pro Minute erlaubt die API im Pro-Plan?“** Mit k = 1 landet oft eine ältere Rate-Limit-Seite auf Platz 1. Erhöhe *k*, bis die aktuelle Seite sicher im Kontext ist.",
+      "xp": 35,
+      "difficulty": 2,
+      "explanation": "Drei Versionen der Rate-Limit-Seite (v1, v2, v3) konkurrieren mit fast gleichem Vokabular. Erst ein größeres *k* bringt v3 (600 Anfragen/Minute) sicher in den Kontext. Dass dann auch v1 und v2 mitkommen, ist der Preis – den Konflikt löst später Freshness (Level 9) oder Reranking (Level 5).",
+      "hint": "Drei Versionen konkurrieren – wie viele Plätze brauchst du mindestens?",
+      "query": "Wie viele Anfragen pro Minute erlaubt die API im Pro-Plan?",
+      "params": [
+        {
+          "name": "retrieval.k",
+          "label": "Anzahl Treffer k",
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "default": 1
+        }
+      ],
+      "target": {
+        "metric": "recall_at_k",
+        "threshold": 0.99,
+        "label": "Recall@k ≥ 99 %"
+      },
+      "base_config": {
+        "query": "Wie viele Anfragen pro Minute erlaubt die API im Pro-Plan?",
+        "corpus": "default",
+        "chunking": {
+          "strategy": "recursive",
+          "size": 300,
+          "overlap": 50
+        },
+        "retrieval": {
+          "method": "bm25",
+          "k": 1,
+          "mmr": false,
+          "mmr_lambda": 0.7,
+          "rerank": false
+        },
+        "freshness": {
+          "enabled": false,
+          "half_life_days": 365,
+          "drop_superseded": false,
+          "as_of": "2026-11-16"
+        },
+        "generation": {
+          "mode": "extractive",
+          "strict_grounding": true,
+          "abstain_threshold": 0.2,
+          "require_citations": true
+        },
+        "verify": true
+      },
+      "solution": {
+        "relevant_doc_ids": [
+          "d07"
+        ],
+        "example_params": {
+          "retrieval.k": 5
+        }
+      }
+    },
+    {
+      "id": "l04t04",
+      "type": "better",
+      "title": "Ein Treffer oder fünf?",
+      "prompt": "Was wäre besser?",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Siehe *Top-k Retrieval*.",
+      "scenario": "Ein Nutzer fragt: *„Wie lange werden gelöschte Dateien aufbewahrt und in welchen Rechenzentren liegen meine Daten?“* Die Antwort steht in der DSGVO-Richtlinie 2025, aber auch das Backup-Dokument und die alte Richtlinie 2022 enthalten ähnliche Begriffe.",
+      "variant_a": {
+        "label": "k = 1",
+        "description": "Nur der beste Treffer kommt in den Kontext – maximal fokussiert."
+      },
+      "variant_b": {
+        "label": "k = 5",
+        "description": "Die fünf besten Treffer kommen in den Kontext."
+      },
+      "run": {
+        "query": "Wie lange werden gelöschte Dateien aufbewahrt und in welchen Rechenzentren liegen meine Daten?",
+        "config_a": {
+          "query": "Wie lange werden gelöschte Dateien aufbewahrt und in welchen Rechenzentren liegen meine Daten?",
+          "corpus": "default",
+          "chunking": {
+            "strategy": "recursive",
+            "size": 300,
+            "overlap": 50
+          },
+          "retrieval": {
+            "method": "bm25",
+            "k": 1,
+            "mmr": false,
+            "mmr_lambda": 0.7,
+            "rerank": false
+          },
+          "freshness": {
+            "enabled": false,
+            "half_life_days": 365,
+            "drop_superseded": false,
+            "as_of": "2026-11-16"
+          },
+          "generation": {
+            "mode": "extractive",
+            "strict_grounding": true,
+            "abstain_threshold": 0.2,
+            "require_citations": true
+          },
+          "verify": true
+        },
+        "config_b": {
+          "query": "Wie lange werden gelöschte Dateien aufbewahrt und in welchen Rechenzentren liegen meine Daten?",
+          "corpus": "default",
+          "chunking": {
+            "strategy": "recursive",
+            "size": 300,
+            "overlap": 50
+          },
+          "retrieval": {
+            "method": "bm25",
+            "k": 5,
+            "mmr": false,
+            "mmr_lambda": 0.7,
+            "rerank": false
+          },
+          "freshness": {
+            "enabled": false,
+            "half_life_days": 365,
+            "drop_superseded": false,
+            "as_of": "2026-11-16"
+          },
+          "generation": {
+            "mode": "extractive",
+            "strict_grounding": true,
+            "abstain_threshold": 0.2,
+            "require_citations": true
+          },
+          "verify": true
+        }
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**k = 5** ist hier besser: Die Frage hat zwei Teile, und bei k = 1 hängt alles davon ab, dass *genau* der richtige Chunk auf Platz 1 steht – mit Chunking kann der Teil zu Rechenzentren in einem anderen Chunk liegen. Höheres k erhöht den Recall.\n\n*Trade-off:* Mit k = 5 kommt auch die veraltete Richtlinie 2022 (90 Tage, Dublin) in den Kontext. Ohne Freshness-Filter oder klare Prompt-Regeln kann das LLM die Versionen vermischen. Breit abrufen ist richtig – aber nur mit nachgelagerter Auswahl."
+      }
+    },
+    {
+      "id": "l04t05",
+      "type": "code",
+      "title": "MMR-Score",
+      "prompt": "Vervollständige den MMR-Score für einen Kandidaten `d` gegeben die bereits ausgewählten Chunks `selected`.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "MMR = λ·Relevanz − (1 − λ)·maximale Ähnlichkeit zu bereits gewählten Chunks. Bei λ = 1 entspricht MMR normalem top-k.",
+      "language": "python",
+      "template": "def mmr_score(d, query, selected, sim, lam=0.7):\n    relevance = sim(query, d)\n    redundancy = max((sim(d, s) for s in selected), default=0.0)\n    return {{1}} * relevance - {{2}} * redundancy",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Gewicht Relevanz"
+        },
+        {
+          "id": "2",
+          "placeholder": "Gewicht Redundanz"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "lam"
+          ],
+          "2": [
+            "(1 - lam)",
+            "(1-lam)",
+            "1 - lam",
+            "1-lam"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l04t06",
+      "type": "boss",
+      "title": "Boss: Der Ranking-Golem",
+      "prompt": "Drei Runden gegen den Golem der schlechten Treffer.",
+      "xp": 100,
+      "difficulty": 3,
+      "explanation": "Ranking gezähmt: Du weißt, wann RRF, MMR und Metadaten-Filter helfen – und wann nicht.",
+      "story": "Der NovaCloud-Bot liefert bei Preisfragen viermal dasselbe Preisblatt in verschiedenen Versionen, und bei der Frage nach `nc_live_` findet er gar nichts. Bring das Retrieval in Ordnung!",
+      "lives": 3,
+      "steps": [
+        {
+          "id": "l04t06s1",
+          "type": "quiz",
+          "title": "Vier Preisblätter",
+          "prompt": "Die top-4 bei „Was kostet der Pro-Plan?“ sind die Preisblätter 2022, 2023, 2024 und 2026. Welche Maßnahme sorgt **zuverlässig** dafür, dass nur der gültige Preis verwendet wird?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Vielfalt ≠ Aktualität. Siehe *MMR: Relevanz und Vielfalt*.",
+          "options": [
+            {
+              "id": "a",
+              "text": "MMR mit λ = 0,3"
+            },
+            {
+              "id": "b",
+              "text": "k auf 1 senken"
+            },
+            {
+              "id": "c",
+              "text": "Veraltete Dokumente über Metadaten (superseded_by) herausfiltern"
+            },
+            {
+              "id": "d",
+              "text": "BM25 statt TF-IDF"
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "c"
+            ],
+            "option_explanations": {
+              "a": "MMR erhöht Vielfalt, kennt aber keine Gültigkeit.",
+              "b": "Dann hängt alles am Ranking – Platz 1 kann das alte Blatt sein.",
+              "c": "Richtig – nur Metadaten wissen, welche Version gilt.",
+              "d": "Beide sind lexikalisch; das Problem bleibt."
+            }
+          }
+        },
+        {
+          "id": "l04t06s2",
+          "type": "order",
+          "title": "Hybrid-Pipeline",
+          "prompt": "Sortiere die Schritte einer Hybrid-Suche.",
+          "xp": 20,
+          "difficulty": 1,
+          "explanation": "Erst beide Suchen, dann Fusion, dann Schnitt auf k.",
+          "items": [
+            {
+              "id": "q",
+              "text": "Frage normalisieren"
+            },
+            {
+              "id": "p",
+              "text": "BM25- und Vektorsuche parallel ausführen"
+            },
+            {
+              "id": "f",
+              "text": "Ranglisten per RRF fusionieren"
+            },
+            {
+              "id": "c",
+              "text": "Top-k der fusionierten Liste weitergeben"
+            }
+          ],
+          "solution": {
+            "order": [
+              "q",
+              "p",
+              "f",
+              "c"
+            ]
+          }
+        },
+        {
+          "id": "l04t06s3",
+          "type": "better",
+          "title": "Fusion",
+          "prompt": "Was wäre besser?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Siehe *Hybrid-Suche und Reciprocal Rank Fusion*.",
+          "scenario": "BM25-Scores liegen zwischen 0 und 25, Kosinus-Scores zwischen 0,2 und 0,9. Du willst beide Listen kombinieren.",
+          "variant_a": {
+            "label": "Scores addieren",
+            "description": "bm25_score + cosine_score"
+          },
+          "variant_b": {
+            "label": "Reciprocal Rank Fusion",
+            "description": "Nur die Ränge kombinieren: Σ 1/(60 + rank)."
+          },
+          "solution": {
+            "correct": "b",
+            "why": "**RRF** ist robust gegen unterschiedliche Skalen – bei der Summe dominiert BM25 schlicht durch größere Zahlen. *Trade-off:* RRF ignoriert, *wie deutlich* ein Treffer vorne liegt; eine sauber normalisierte, gewichtete Summe kann mit Tuning etwas besser sein."
+          }
+        }
+      ]
+    }
+  ]
+}

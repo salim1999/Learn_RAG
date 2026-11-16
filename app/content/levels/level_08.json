@@ -1,0 +1,389 @@
+{
+  "id": 8,
+  "title": "Zitate & Attribution",
+  "subtitle": "Jede Aussage mit Beleg – und jeder Beleg geprüft",
+  "icon": "🔗",
+  "color": "#2bd9a0",
+  "theory": [
+    {
+      "heading": "Warum Zitate?",
+      "body_md": "Zitate erfüllen drei Aufgaben:\n1. **Vertrauen und Nachprüfbarkeit** für Nutzer („Woher weißt du das?“).\n2. **Automatische Verifikation:** Nur wenn klar ist, *welcher* Chunk einen Satz stützen soll, kann man gezielt prüfen.\n3. **Fehleranalyse:** Bei falschen Antworten zeigt das Zitat, ob Retrieval (falscher Chunk) oder Generierung (Chunk falsch wiedergegeben) schuld war.\n\nAber: **Ein Zitat ist eine Behauptung**, kein Beweis. Modelle setzen manchmal plausible, aber falsche Zitate – die Aussage steht gar nicht im zitierten Chunk. Das nennt man **Fehlattribution**.",
+      "key_points": [
+        "Zitate ermöglichen Vertrauen, Verifikation und Fehleranalyse.",
+        "Ein Zitat ist eine Behauptung, die geprüft werden muss.",
+        "Fehlattribution = Aussage steht nicht in der Quelle."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Granularität und Qualitätsmaße",
+      "body_md": "**Granularität:** Dokument („laut Preisblatt 2026“) < Chunk (`[d04#1]`) < Satz/Span (exakter Textausschnitt). Feiner ist prüfbarer, aber aufwendiger.\n\n**Citation Precision:** Anteil der Zitate, die die zugehörige Aussage tatsächlich stützen.\n**Citation Recall:** Anteil der Aussagen, die mindestens ein stützendes Zitat haben.\n\n```python\ndef citation_precision(paare, stuetzt):\n    # paare: [(satz, chunk_id), ...]\n    ok = sum(1 for s, cid in paare if stuetzt(s, cid))\n    return ok / len(paare) if paare else 0.0\n```\n\nTypisches Bild: hoher Recall (überall Zitate), niedrige Precision (viele zeigen ins Leere). Beide Werte gehören ins Monitoring.",
+      "key_points": [
+        "Dokument-, Chunk- oder Span-Zitate.",
+        "Precision: Stützt das Zitat die Aussage?",
+        "Recall: Hat jede Aussage ein Zitat?"
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Inline vs. Post-hoc-Attribution",
+      "body_md": "**Inline:** Das LLM setzt die Zitate während der Generierung (`… 16,90 € [d04#1]`). Einfach, aber das Modell kann falsch zitieren.\n\n**Post-hoc:** Erst Antwort generieren, dann jeden Satz automatisch dem Chunk mit der höchsten Stützung zuordnen (Ähnlichkeit oder NLI). Zuverlässigere Zuordnung, aber Sätze ohne passende Quelle fallen auf – was gut ist: Das sind Halluzinationskandidaten.\n\n**Kombination (empfohlen):** Inline generieren lassen, dann post-hoc **prüfen**: Stützt der zitierte Chunk den Satz? Wenn nicht, besseren Chunk suchen oder Satz markieren/entfernen.",
+      "key_points": [
+        "Inline: einfach, fehleranfällig.",
+        "Post-hoc: nachträgliche Zuordnung.",
+        "Bestes Muster: inline + post-hoc-Prüfung."
+      ],
+      "visual": "hallucination"
+    },
+    {
+      "heading": "Zitate validieren",
+      "body_md": "Mindest-Checks, die in keinem Produktivsystem fehlen sollten:\n\n1. **Existenz:** Jede zitierte ID muss im aktuellen Kontext vorkommen – erfundene IDs sofort ablehnen.\n2. **Stützung:** Der zitierte Chunk muss die Aussage tragen (NLI/Overlap).\n3. **Gültigkeit:** Der zitierte Chunk sollte nicht `superseded` sein – sonst „korrekt zitiert, aber veraltet“.\n4. **Rechte:** Der Nutzer muss die Quelle sehen dürfen (Level 14).\n\n```python\ndef invalid_citations(sentences, context_ids):\n    return [cid for s in sentences for cid in s[\"citations\"] if cid not in context_ids]\n```",
+      "key_points": [
+        "Existenz, Stützung, Gültigkeit, Rechte.",
+        "Erfundene IDs sind ein harter Fehler.",
+        "Veraltete Quellen zu zitieren ist ein stiller Fehler."
+      ],
+      "visual": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l08t01",
+      "type": "spot",
+      "title": "Stimmen die Zitate?",
+      "prompt": "Frage: *„Welche Support-Zeiten gelten?“* Markiere alle Sätze, deren Zitat die Aussage **nicht** stützt.",
+      "xp": 35,
+      "difficulty": 2,
+      "explanation": "Achte auf **Fehlattribution**: Eine wahre Aussage mit falschem Zitat ist trotzdem ein Fehler. Siehe *Warum Zitate?*",
+      "visual": "hallucination",
+      "context": [
+        {
+          "id": "d11#0",
+          "text": "(Support-Zeiten 2025) Der Support ist montags bis freitags von 8:00 bis 20:00 Uhr und samstags von 10:00 bis 14:00 Uhr (MEZ) per E-Mail und Live-Chat erreichbar."
+        },
+        {
+          "id": "d11#1",
+          "text": "(Support-Zeiten 2025) Garantierte Erstreaktionszeiten: Pro-Plan 8 Stunden, Business-Plan 4 Stunden, bei P1-Störungen 1 Stunde."
+        },
+        {
+          "id": "d10#0",
+          "text": "(Support-Zeiten 2023, ersetzt) Der NovaCloud-Support ist montags bis freitags von 9:00 bis 17:00 Uhr (MEZ) per E-Mail erreichbar."
+        }
+      ],
+      "answer_sentences": [
+        {
+          "id": "s1",
+          "text": "Der Support ist montags bis freitags von 8 bis 20 Uhr erreichbar. [d11#0]"
+        },
+        {
+          "id": "s2",
+          "text": "Samstags ist er von 10 bis 14 Uhr erreichbar. [d11#1]"
+        },
+        {
+          "id": "s3",
+          "text": "Im Pro-Plan beträgt die Erstreaktionszeit 8 Stunden. [d11#1]"
+        },
+        {
+          "id": "s4",
+          "text": "Telefonischer Support wird nicht angeboten. [d11#0]"
+        }
+      ],
+      "solution": {
+        "hallucinated": [
+          "s2",
+          "s4"
+        ],
+        "notes": {
+          "s2": "Die Aussage stimmt, aber sie steht in d11#0, nicht in d11#1 – Fehlattribution.",
+          "s4": "Steht in keinem der Chunks so; die Aussage „kein Telefon“ stammt aus der alten Version 2023 (nicht im Kontext) – und die neue Regel nennt eine 24/7-Hotline für Business."
+        }
+      }
+    },
+    {
+      "id": "l08t02",
+      "type": "quiz",
+      "title": "Citation Precision",
+      "prompt": "Eine Antwort hat 5 Sätze mit insgesamt 6 Zitaten. 4 Zitate stützen ihren Satz, 2 nicht. Ein Satz hat gar kein Zitat. Wie hoch ist die Citation Precision?",
+      "xp": 20,
+      "difficulty": 2,
+      "explanation": "Precision = stützende Zitate / alle Zitate. (Citation Recall wäre hier 4/5, da ein Satz unzitiert ist – sofern jeder der übrigen Sätze mind. ein stützendes Zitat hat.)",
+      "options": [
+        {
+          "id": "a",
+          "text": "4/5 = 0,8"
+        },
+        {
+          "id": "b",
+          "text": "4/6 ≈ 0,67"
+        },
+        {
+          "id": "c",
+          "text": "5/6 ≈ 0,83"
+        },
+        {
+          "id": "d",
+          "text": "4/4 = 1,0"
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "b"
+        ],
+        "option_explanations": {
+          "a": "Das mischt Sätze und Zitate.",
+          "b": "Richtig – stützende Zitate / alle Zitate.",
+          "c": "Falsch gezählt.",
+          "d": "Nicht stützende Zitate müssen mitzählen."
+        }
+      }
+    },
+    {
+      "id": "l08t03",
+      "type": "better",
+      "title": "Inline oder Post-hoc?",
+      "prompt": "Was wäre besser?",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Siehe *Inline vs. Post-hoc-Attribution*.",
+      "scenario": "Ein Rechtsabteilungs-Bot soll Fragen zur DSGVO-Richtlinie beantworten. Jede Aussage muss nachweislich belegt sein.",
+      "variant_a": {
+        "label": "Nur inline",
+        "description": "Das LLM setzt die Zitate selbst; sie werden ungeprüft angezeigt."
+      },
+      "variant_b": {
+        "label": "Inline + Post-hoc-Prüfung",
+        "description": "Das LLM zitiert, danach prüft ein NLI-Schritt jedes Satz-Zitat-Paar; ungestützte Sätze werden markiert oder entfernt."
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**B**: Bei Belegpflicht reicht ein vom Modell gesetztes Zitat nicht – Fehlattribution ist häufig. Die Post-hoc-Prüfung macht aus „behauptet belegt“ ein „geprüft belegt“.\n\n*Trade-off:* Zusätzliche Latenz und Kosten pro Antwort, und der NLI-Prüfer kann selbst irren (z. B. bei Paraphrasen ungestützte markieren). Für einen Freizeit-Chatbot wäre A vertretbar; für Recht und Compliance nicht."
+      }
+    },
+    {
+      "id": "l08t04",
+      "type": "spot",
+      "title": "Erfundene Quelle",
+      "prompt": "Frage: *„Wie lange sind OAuth-Token gültig?“* Kontext-IDs: `d23#1` und `d23#2`. Markiere fehlerhafte Sätze.",
+      "xp": 25,
+      "difficulty": 2,
+      "explanation": "Ein Zitat auf eine ID außerhalb des Kontexts ist immer ein harter Fehler. Siehe *Zitate validieren*.",
+      "visual": "hallucination",
+      "context": [
+        {
+          "id": "d23#1",
+          "text": "(API-Authentifizierung) API-Schlüssel beginnen mit dem Präfix nc_live_ für Produktivumgebungen und nc_test_ für die Testumgebung. Sie laufen nach 365 Tagen automatisch ab."
+        },
+        {
+          "id": "d23#2",
+          "text": "(API-Authentifizierung) OAuth-Zugriffstoken sind 60 Minuten gültig, Refresh-Token 30 Tage."
+        }
+      ],
+      "answer_sentences": [
+        {
+          "id": "s1",
+          "text": "OAuth-Zugriffstoken sind 60 Minuten gültig. [d23#2]"
+        },
+        {
+          "id": "s2",
+          "text": "Refresh-Token sind 30 Tage gültig. [d23#2]"
+        },
+        {
+          "id": "s3",
+          "text": "Nach Ablauf muss man sich per 2FA neu anmelden. [d14#3]"
+        },
+        {
+          "id": "s4",
+          "text": "API-Schlüssel laufen nach 365 Tagen ab. [d23#1]"
+        }
+      ],
+      "solution": {
+        "hallucinated": [
+          "s3"
+        ],
+        "notes": {
+          "s3": "d14#3 ist gar nicht im Kontext – erfundene bzw. nicht abgerufene Quelle, und die Aussage ist unbelegt."
+        }
+      }
+    },
+    {
+      "id": "l08t05",
+      "type": "order",
+      "title": "Zitat-Validierung",
+      "prompt": "Sortiere die Prüfungen für jedes Satz-Zitat-Paar von billig nach teuer.",
+      "xp": 25,
+      "difficulty": 2,
+      "explanation": "Erst die nahezu kostenlosen Lookups (ID, Metadaten), dann String-Checks, zuletzt das teure Modell. So spart man NLI-Aufrufe für ohnehin ungültige Zitate.",
+      "items": [
+        {
+          "id": "ex",
+          "text": "Existiert die zitierte ID im Kontext?"
+        },
+        {
+          "id": "st",
+          "text": "Ist der zitierte Chunk gültig (nicht superseded)?"
+        },
+        {
+          "id": "num",
+          "text": "Kommen Zahlen und Daten des Satzes im Chunk vor?"
+        },
+        {
+          "id": "nli",
+          "text": "Stützt der Chunk den Satz laut NLI-Modell?"
+        }
+      ],
+      "solution": {
+        "order": [
+          "ex",
+          "st",
+          "num",
+          "nli"
+        ]
+      }
+    },
+    {
+      "id": "l08t06",
+      "type": "code",
+      "title": "Ungültige Zitate finden",
+      "prompt": "Gib alle zitierten IDs zurück, die nicht im Kontext vorkommen.",
+      "xp": 25,
+      "difficulty": 1,
+      "explanation": "Jede ID, die nicht im erlaubten Set liegt, ist ein erfundenes Zitat.",
+      "language": "python",
+      "template": "def invalid_citations(sentences, context_ids):\n    allowed = set(context_ids)\n    return [cid for s in sentences for cid in s[\"citations\"] if {{1}}]",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Bedingung"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "cid not in allowed",
+            "not cid in allowed",
+            "cid not in context_ids",
+            "cid not in set(context_ids)"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l08t07",
+      "type": "boss",
+      "title": "Boss: Der Quellenfälscher",
+      "prompt": "Ein Fälscher schmuggelt falsche Belege in deine Antworten.",
+      "xp": 100,
+      "difficulty": 3,
+      "explanation": "Der Fälscher ist entlarvt: Zitate werden jetzt geprüft, nicht geglaubt.",
+      "visual": "hallucination",
+      "story": "Ein Audit hat ergeben: 30 % der NovaMind-Zitate zeigen auf Chunks, die die Aussage nicht tragen. Du hast drei Leben, um den Fälscher zu entlarven.",
+      "lives": 3,
+      "steps": [
+        {
+          "id": "l08t07s1",
+          "type": "spot",
+          "title": "Sicherheits-FAQ",
+          "prompt": "Frage: *„Wie verschlüsselt NovaCloud Daten?“* Markiere Sätze mit nicht stützendem Zitat.",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Fehlattribution erkennen.",
+          "visual": "hallucination",
+          "context": [
+            {
+              "id": "d14#0",
+              "text": "(Sicherheits-FAQ) Alle Dateien werden im Ruhezustand mit AES-256 verschlüsselt. Die Übertragung erfolgt ausschließlich über TLS 1.3. Die Datenschlüssel werden alle 90 Tage automatisch rotiert."
+            },
+            {
+              "id": "d14#1",
+              "text": "(Sicherheits-FAQ) NovaCloud ist seit Mai 2024 nach ISO/IEC 27001 zertifiziert."
+            }
+          ],
+          "answer_sentences": [
+            {
+              "id": "s1",
+              "text": "Dateien werden im Ruhezustand mit AES-256 verschlüsselt. [d14#0]"
+            },
+            {
+              "id": "s2",
+              "text": "Die Schlüssel werden alle 90 Tage rotiert. [d14#1]"
+            },
+            {
+              "id": "s3",
+              "text": "Die Übertragung erfolgt über TLS 1.3. [d14#0]"
+            }
+          ],
+          "solution": {
+            "hallucinated": [
+              "s2"
+            ],
+            "notes": {
+              "s2": "Inhalt korrekt, aber er steht in d14#0, nicht in d14#1."
+            }
+          }
+        },
+        {
+          "id": "l08t07s2",
+          "type": "quiz",
+          "title": "Welche Metrik ist gesunken?",
+          "prompt": "Fast jeder Satz hat ein Zitat, aber viele Zitate tragen die Aussage nicht. Welche Metrik ist niedrig?",
+          "xp": 20,
+          "difficulty": 1,
+          "explanation": "Siehe *Granularität und Qualitätsmaße*.",
+          "options": [
+            {
+              "id": "a",
+              "text": "Citation Recall"
+            },
+            {
+              "id": "b",
+              "text": "Citation Precision"
+            },
+            {
+              "id": "c",
+              "text": "Recall@k"
+            },
+            {
+              "id": "d",
+              "text": "MRR"
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "b"
+            ],
+            "option_explanations": {
+              "a": "Recall ist hoch – fast jeder Satz ist zitiert.",
+              "b": "Richtig.",
+              "c": "Retrieval-Metrik, nicht Attribution.",
+              "d": "Retrieval-Metrik."
+            }
+          }
+        },
+        {
+          "id": "l08t07s3",
+          "type": "better",
+          "title": "Gegenmaßnahme",
+          "prompt": "Was wäre besser?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Siehe *Inline vs. Post-hoc-Attribution*.",
+          "scenario": "Du willst Citation Precision erhöhen, ohne die Antwortlatenz zu verdoppeln.",
+          "variant_a": {
+            "label": "Post-hoc-Neuzuordnung",
+            "description": "Nach der Generierung jeden Satz per Embedding-Ähnlichkeit dem bestpassenden Kontext-Chunk zuordnen; bei zu geringer Ähnlichkeit Satz markieren."
+          },
+          "variant_b": {
+            "label": "Prompt verschärfen",
+            "description": "„Zitiere bitte wirklich sorgfältig!“ in den System-Prompt schreiben."
+          },
+          "solution": {
+            "correct": "a",
+            "why": "**A** behebt das Problem strukturell: Die Zuordnung erfolgt messbar, und ungestützte Sätze fallen auf. Embedding-Ähnlichkeit ist schnell (Vektoren liegen ohnehin vor). *Trade-off:* Ähnlichkeit ist nicht Stützung – Widersprüche mit gleichem Vokabular werden nicht erkannt; für Hochrisiko-Antworten zusätzlich NLI. B kann etwas helfen, ist aber nicht überprüfbar."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,428 @@
+{
+  "id": 12,
+  "title": "Agentic RAG",
+  "subtitle": "Planner, Retriever, Generator, Verifier",
+  "icon": "🤖",
+  "color": "#7c5cff",
+  "theory": [
+    {
+      "heading": "Von der Pipeline zum Agenten",
+      "body_md": "Eine klassische RAG-Pipeline läuft **einmal** von vorne nach hinten. **Agentic RAG** macht daraus eine **Schleife mit Entscheidungen**: Ein oder mehrere LLM-gesteuerte Rollen entscheiden, *ob*, *was* und *wie oft* gesucht wird.\n\nTypische Rollen:\n- **Planner:** Zerlegt die Frage, entscheidet über Werkzeuge (Vektorsuche, SQL, Web) und Reihenfolge.\n- **Retriever:** Führt Suchen aus, ggf. mit transformierten Anfragen.\n- **Generator:** Formuliert eine Antwort aus dem gesammelten Kontext.\n- **Verifier:** Prüft Faithfulness, Vollständigkeit und Freshness; gibt Feedback oder Freigabe.\n- **Orchestrator:** Hält den Zustand, zählt Iterationen, bricht ab.\n\n```python\nfor iteration in range(1, max_iterations + 1):\n    plan = planner(frage, notizen)\n    kontext += retriever(plan.suchanfragen)\n    antwort = generator(frage, kontext)\n    urteil = verifier(antwort, kontext)\n    if urteil.ok:\n        return antwort\n    notizen.append(urteil.feedback)\nreturn abstain(\"Keine ausreichend belegte Antwort gefunden.\")\n```\n\n> **Merksatz:** Ein Agent ist eine Pipeline, die über sich selbst nachdenken darf – und deshalb Grenzen braucht.",
+      "key_points": [
+        "Schleife statt Einbahnstraße.",
+        "Planner, Retriever, Generator, Verifier, Orchestrator.",
+        "Ohne Abbruchkriterien kein Produktivbetrieb."
+      ],
+      "visual": "agents"
+    },
+    {
+      "heading": "Self-RAG",
+      "body_md": "**Self-RAG** (Asai et al., 2023) trainiert ein Modell darauf, während der Generierung **Reflexions-Tokens** auszugeben:\n\n- **Retrieve?** – Brauche ich für den nächsten Abschnitt überhaupt Retrieval?\n- **IsRel** – Ist die gefundene Passage relevant?\n- **IsSup** – Wird meine Aussage von der Passage gestützt (voll, teilweise, gar nicht)?\n- **IsUse** – Wie nützlich ist die Antwort insgesamt?\n\nDamit entscheidet das Modell **selbst und adaptiv**, wann es sucht, und kann Kandidaten nach Stützung bewerten. In der Praxis wird das Prinzip oft ohne Spezialtraining nachgebaut: Ein LLM wird per Prompt gebeten, diese Urteile explizit abzugeben.\n\nVorteil: Kein Retrieval für triviale Fragen, Kritik eingebaut. Nachteil: Mehr Tokens pro Antwort, und die Selbstkritik ist nur so gut wie das Modell.",
+      "key_points": [
+        "Reflexions-Tokens: Retrieve?, IsRel, IsSup, IsUse.",
+        "Adaptives Retrieval statt immer.",
+        "Prinzip auch per Prompting nachbaubar."
+      ],
+      "visual": "agents"
+    },
+    {
+      "heading": "CRAG: Corrective RAG",
+      "body_md": "**Corrective RAG (CRAG)** (Yan et al., 2024) setzt einen leichten **Retrieval-Evaluator** hinter die Suche, der die Treffer als **korrekt**, **inkorrekt** oder **mehrdeutig** einstuft:\n\n- **Korrekt:** Treffer werden verfeinert (irrelevante Teile herausgefiltert, „Knowledge Refinement“) und genutzt.\n- **Inkorrekt:** Treffer verwerfen und eine **alternative Quelle** nutzen (im Originalpapier Websuche; im Unternehmen z. B. ein anderer Index, SQL oder Abstain).\n- **Mehrdeutig:** Beides kombinieren.\n\nCRAG ist robuster gegen schlechtes Retrieval, weil es nicht blind dem ersten Ergebnis vertraut. Im NovaCloud-Kontext wäre „Websuche“ übrigens gefährlich: Das Forum mit falschen Angaben ist öffentlich. **Alternative Quellen brauchen dieselben Vertrauensregeln** wie der Hauptindex.",
+      "key_points": [
+        "Evaluator stuft Treffer ein: korrekt / inkorrekt / mehrdeutig.",
+        "Bei inkorrekt: andere Quelle oder Abstain.",
+        "Fallback-Quellen brauchen Vertrauensregeln."
+      ],
+      "visual": "agents"
+    },
+    {
+      "heading": "Abbruchkriterien für Schleifen",
+      "body_md": "Agenten können sich festlaufen: immer neue Suchen, gleiche Ergebnisse, steigende Kosten. Jede Schleife braucht **harte** und **weiche** Abbruchkriterien:\n\n**Hart (immer):**\n- maximale Iterationen (z. B. 3)\n- Token-/Kostenbudget pro Anfrage\n- Zeitlimit (z. B. 20 s)\n\n**Weich (inhaltlich):**\n- Verifier gibt frei (Faithfulness ≥ Schwelle, alle Teilfragen beantwortet)\n- **Keine neuen Informationen:** Die letzte Suche lieferte nur bereits bekannte Chunks.\n- **Wiederholte Anfrage:** Der Planner schlägt eine Suche vor, die schon gelaufen ist.\n\nUnd ganz wichtig: **Was passiert beim Abbruch ohne Erfolg?** → Ehrliche Teilantwort oder Abstain – *nicht* die letzte, unverifizierte Antwort ausliefern.\n\n```python\nif iteration >= max_iterations or not neue_chunks or anfrage in bisherige_anfragen:\n    return teilantwort_oder_abstain()\n```",
+      "key_points": [
+        "Max. Iterationen, Budget, Zeitlimit.",
+        "Abbruch bei ‚keine neuen Infos‘ oder Wiederholung.",
+        "Erfolgloser Abbruch ⇒ Abstain/Teilantwort."
+      ],
+      "visual": "agents"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l12t01",
+      "type": "order",
+      "title": "Der Agenten-Loop",
+      "prompt": "Sortiere eine Iteration des Agenten-Loops.",
+      "xp": 25,
+      "difficulty": 1,
+      "explanation": "Der Orchestrator entscheidet erst nach dem Urteil des Verifiers. Siehe *Von der Pipeline zum Agenten*.",
+      "visual": "agents",
+      "items": [
+        {
+          "id": "plan",
+          "text": "Planner zerlegt die Frage und plant Suchanfragen"
+        },
+        {
+          "id": "ret",
+          "text": "Retriever führt die Suchen aus"
+        },
+        {
+          "id": "gen",
+          "text": "Generator formuliert eine Antwort mit Zitaten"
+        },
+        {
+          "id": "ver",
+          "text": "Verifier prüft Belege und Vollständigkeit"
+        },
+        {
+          "id": "dec",
+          "text": "Orchestrator entscheidet: ausliefern, neue Iteration oder abbrechen"
+        }
+      ],
+      "solution": {
+        "order": [
+          "plan",
+          "ret",
+          "gen",
+          "ver",
+          "dec"
+        ]
+      }
+    },
+    {
+      "id": "l12t02",
+      "type": "quiz",
+      "title": "Self-RAG oder CRAG?",
+      "prompt": "Welche Aussage beschreibt **CRAG** korrekt?",
+      "xp": 15,
+      "difficulty": 1,
+      "explanation": "Siehe *CRAG: Corrective RAG*.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Das Modell entscheidet per Reflexions-Token, ob es überhaupt suchen muss."
+        },
+        {
+          "id": "b",
+          "text": "Ein Evaluator bewertet die Treffer; bei schlechten Treffern wird auf eine alternative Quelle ausgewichen."
+        },
+        {
+          "id": "c",
+          "text": "Die Frage wird in eine hypothetische Antwort umgewandelt."
+        },
+        {
+          "id": "d",
+          "text": "Alle Treffer werden per Cross-Encoder neu sortiert."
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "b"
+        ],
+        "option_explanations": {
+          "a": "Das ist Self-RAG.",
+          "b": "Richtig – korrektiv: korrekt / inkorrekt / mehrdeutig.",
+          "c": "Das ist HyDE.",
+          "d": "Das ist Reranking."
+        }
+      }
+    },
+    {
+      "id": "l12t03",
+      "type": "tune",
+      "title": "Multi-Hop mit genug Platz",
+      "prompt": "Der Planner hat die Frage **„Ab wann wird API v2 abgeschaltet und wie viele Anfragen pro Minute erlaubt die API v3 im Pro-Plan?“** als *eine* Suchanfrage weitergegeben. Zwei Dokumente werden gebraucht (Deprecation-Policy und Rate-Limits v3). Ersetzte Versionen sind gefiltert. Stelle *k* so ein, dass beide gefunden werden.",
+      "xp": 40,
+      "difficulty": 2,
+      "explanation": "Mit k = 1 (oder 2) gewinnen oft Chunks desselben Themas, und das zweite Dokument fehlt – der Verifier würde „unvollständig“ melden und eine zweite Iteration auslösen. Ein höheres *k* löst das in einer Iteration, kostet aber Kontext. Ein guter Planner hätte die Frage gleich in zwei Teilfragen zerlegt.",
+      "hint": "Zwei Themen, mehrere Chunks pro Thema.",
+      "visual": "agents",
+      "query": "Ab wann wird API v2 abgeschaltet und wie viele Anfragen pro Minute erlaubt die API v3 im Pro-Plan?",
+      "params": [
+        {
+          "name": "retrieval.k",
+          "label": "Anzahl Treffer k",
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "default": 1
+        }
+      ],
+      "target": {
+        "metric": "recall_at_k",
+        "threshold": 0.99,
+        "label": "Recall@k ≥ 99 %"
+      },
+      "base_config": {
+        "query": "Ab wann wird API v2 abgeschaltet und wie viele Anfragen pro Minute erlaubt die API v3 im Pro-Plan?",
+        "corpus": "default",
+        "chunking": {
+          "strategy": "recursive",
+          "size": 300,
+          "overlap": 50
+        },
+        "retrieval": {
+          "method": "bm25",
+          "k": 1,
+          "mmr": false,
+          "mmr_lambda": 0.7,
+          "rerank": false
+        },
+        "freshness": {
+          "enabled": true,
+          "half_life_days": 365,
+          "drop_superseded": true,
+          "as_of": "2026-11-16"
+        },
+        "generation": {
+          "mode": "extractive",
+          "strict_grounding": true,
+          "abstain_threshold": 0.2,
+          "require_citations": true
+        },
+        "verify": true
+      },
+      "solution": {
+        "relevant_doc_ids": [
+          "d24",
+          "d07"
+        ],
+        "example_params": {
+          "retrieval.k": 6
+        }
+      }
+    },
+    {
+      "id": "l12t04",
+      "type": "better",
+      "title": "Agent für alles?",
+      "prompt": "Was wäre besser?",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Agentic RAG ist ein Werkzeug für schwierige Fragen, kein Standard für alle.",
+      "scenario": "80 % der Anfragen an den NovaCloud-Bot sind einfache FAQ-Fragen („Wie kündige ich?“, „Was kostet Pro?“). Die Latenz soll unter 2 Sekunden bleiben.",
+      "variant_a": {
+        "label": "Einfache Pipeline + Eskalation",
+        "description": "Standard-RAG für alle Fragen; nur wenn Verifikation scheitert oder die Frage komplex ist, übernimmt ein Agenten-Loop."
+      },
+      "variant_b": {
+        "label": "Immer Agentic RAG",
+        "description": "Jede Frage durchläuft Planner, Retriever, Generator und Verifier mit bis zu drei Iterationen."
+      },
+      "solution": {
+        "correct": "a",
+        "why": "**A**: Für einfache Fragen bringt der Agenten-Overhead (mehrere LLM-Aufrufe pro Iteration) kaum Qualitätsgewinn, verdoppelt aber leicht Latenz und Kosten. Mit Eskalation bekommen die schwierigen 20 % trotzdem die volle Behandlung.\n\n*Trade-off:* Zwei Pfade bedeuten mehr Komplexität in Code, Tests und Monitoring; und die Eskalationslogik muss zuverlässig erkennen, wann eine Frage „schwierig“ ist. Bei geringem Volumen und hohem Qualitätsanspruch kann B die einfachere Wahl sein."
+      }
+    },
+    {
+      "id": "l12t05",
+      "type": "code",
+      "title": "Abbruchbedingung",
+      "prompt": "Vervollständige die Abbruchprüfung des Orchestrators.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Drei Abbruchgründe: Iterationslimit, keine neuen Chunks, wiederholte Anfrage. Ohne sie dreht sich der Agent im Kreis und verbrennt Budget.",
+      "visual": "agents",
+      "language": "python",
+      "template": "def should_stop(iteration, max_iterations, new_chunks, query, past_queries):\n    if iteration >= {{1}}:\n        return True\n    if len(new_chunks) == 0:\n        return True\n    if {{2}}:\n        return True\n    return False",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "harte Grenze"
+        },
+        {
+          "id": "2",
+          "placeholder": "Wiederholung erkennen"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "max_iterations"
+          ],
+          "2": [
+            "query in past_queries",
+            "past_queries.count(query) > 0",
+            "query in set(past_queries)"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l12t06",
+      "type": "explain",
+      "title": "Wann hört der Agent auf?",
+      "prompt": "Erkläre kurz.",
+      "xp": 40,
+      "difficulty": 2,
+      "explanation": "Siehe *Abbruchkriterien für Schleifen*.",
+      "visual": "agents",
+      "question": "Welche Abbruchkriterien braucht ein Agentic-RAG-Loop, und was soll das System tun, wenn es ohne verifizierte Antwort abbricht?",
+      "solution": {
+        "rubric": [
+          {
+            "concept": "Harte Grenzen: Iterationen, Budget, Zeit",
+            "keywords": [
+              "iteration",
+              "max",
+              "budget",
+              "kosten",
+              "zeitlimit",
+              "timeout",
+              "token"
+            ]
+          },
+          {
+            "concept": "Erfolg: Verifier gibt frei",
+            "keywords": [
+              "verifier",
+              "verifiz",
+              "freigabe",
+              "faithfulness",
+              "belegt",
+              "geprüft",
+              "erfolg"
+            ]
+          },
+          {
+            "concept": "Kein Fortschritt: keine neuen Infos / Wiederholung",
+            "keywords": [
+              "keine neuen",
+              "wiederhol",
+              "gleiche anfrage",
+              "fortschritt",
+              "dieselben",
+              "schleife",
+              "loop"
+            ]
+          },
+          {
+            "concept": "Bei Misserfolg: Abstain oder Teilantwort statt unverifizierter Antwort",
+            "keywords": [
+              "abstain",
+              "ablehn",
+              "teilantwort",
+              "nicht beantwort",
+              "keine antwort",
+              "ehrlich",
+              "weiß nicht"
+            ]
+          }
+        ],
+        "model_answer": "Ein Agenten-Loop braucht **harte Grenzen** (maximale Iterationen, Token-/Kostenbudget, Zeitlimit), ein **Erfolgskriterium** (der Verifier gibt die Antwort frei, alle Teilfragen sind belegt) und **Fortschrittskriterien** (Abbruch, wenn eine Suche keine neuen Chunks liefert oder der Planner eine bereits gestellte Anfrage wiederholt).\n\nBricht der Loop ohne verifizierte Antwort ab, darf das System nicht einfach die letzte Antwort ausliefern. Richtig ist eine ehrliche **Teilantwort** (was belegt ist, mit Zitaten, plus was fehlt) oder ein **Abstain**.",
+        "pass_ratio": 0.6
+      }
+    },
+    {
+      "id": "l12t07",
+      "type": "boss",
+      "title": "Boss: Der Endlos-Golem",
+      "prompt": "Der Golem läuft im Kreis – und nimmt dein Budget mit.",
+      "xp": 100,
+      "difficulty": 3,
+      "explanation": "Der Golem steht still: Dein Agent weiß jetzt, wann Schluss ist.",
+      "visual": "agents",
+      "story": "Ein Agent hat bei der Frage „Welche Programmiersprache nutzt das NovaCloud-Backend?“ 14 Iterationen gedreht, 40 Suchen gestartet und am Ende eine erfundene Antwort geliefert. Repariere den Agenten in drei Runden.",
+      "lives": 3,
+      "steps": [
+        {
+          "id": "l12t07s1",
+          "type": "quiz",
+          "title": "Die Diagnose",
+          "prompt": "Was ist das grundlegende Problem?",
+          "xp": 20,
+          "difficulty": 1,
+          "explanation": "Siehe *Abbruchkriterien für Schleifen*.",
+          "options": [
+            {
+              "id": "a",
+              "text": "Das Embedding-Modell ist zu klein."
+            },
+            {
+              "id": "b",
+              "text": "Die Frage ist im Korpus nicht beantwortbar, und der Agent hat weder Iterationslimit noch Abstain-Pfad."
+            },
+            {
+              "id": "c",
+              "text": "Der Chunk-Overlap ist zu groß."
+            },
+            {
+              "id": "d",
+              "text": "Der Verifier ist zu großzügig."
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "b"
+            ],
+            "option_explanations": {
+              "a": "Kein Modell findet, was nicht existiert.",
+              "b": "Richtig – unbeantwortbare Fragen brauchen einen definierten Ausgang.",
+              "c": "Irrelevant.",
+              "d": "Eher umgekehrt: Er hat nie freigegeben, aber es gab keinen Abbruch."
+            }
+          }
+        },
+        {
+          "id": "l12t07s2",
+          "type": "order",
+          "title": "CRAG-Ablauf",
+          "prompt": "Sortiere den korrigierenden Ablauf.",
+          "xp": 20,
+          "difficulty": 1,
+          "explanation": "CRAG korrigiert schlechtes Retrieval – und endet bei fehlender Information in einem ehrlichen Abstain.",
+          "visual": "agents",
+          "items": [
+            {
+              "id": "r",
+              "text": "Treffer abrufen"
+            },
+            {
+              "id": "e",
+              "text": "Evaluator stuft Treffer als korrekt/inkorrekt/mehrdeutig ein"
+            },
+            {
+              "id": "b",
+              "text": "Bei ‚inkorrekt‘: alternative vertrauenswürdige Quelle prüfen"
+            },
+            {
+              "id": "a",
+              "text": "Findet auch sie nichts: Abstain mit Begründung"
+            }
+          ],
+          "solution": {
+            "order": [
+              "r",
+              "e",
+              "b",
+              "a"
+            ]
+          }
+        },
+        {
+          "id": "l12t07s3",
+          "type": "better",
+          "title": "Was tun nach Iteration 3?",
+          "prompt": "Was wäre besser?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Siehe *Abbruchkriterien für Schleifen*.",
+          "scenario": "Nach 3 Iterationen ist der Verifier immer noch nicht zufrieden: zwei von drei Aussagen sind belegt.",
+          "variant_a": {
+            "label": "Teilantwort",
+            "description": "Belegte Aussagen mit Zitaten ausgeben und klar sagen, welcher Teil nicht beantwortet werden konnte."
+          },
+          "variant_b": {
+            "label": "Letzte Antwort ausliefern",
+            "description": "Die vollständige Antwort der letzten Iteration ausgeben – sie klingt ja überzeugend."
+          },
+          "solution": {
+            "correct": "a",
+            "why": "**A**: Die unbelegte dritte Aussage ist ein Halluzinationskandidat; sie auszuliefern untergräbt das Vertrauen. Eine Teilantwort ist ehrlich und trotzdem nützlich. *Trade-off:* Nutzer empfinden Teilantworten manchmal als unbefriedigend – ein Hinweis auf weitere Hilfe (Support-Kontakt) mildert das."
+          }
+        }
+      ]
+    }
+  ]
+}

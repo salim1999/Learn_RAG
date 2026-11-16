@@ -1,0 +1,323 @@
+{
+  "id": 2,
+  "title": "Dokumente & Chunking",
+  "subtitle": "Gute Antworten beginnen bei sauberen Chunks",
+  "icon": "✂️",
+  "color": "#2bd9a0",
+  "theory": [
+    {
+      "heading": "Ingestion: Vom Rohdokument zum sauberen Text",
+      "body_md": "Bevor irgendetwas eingebettet wird, müssen Dokumente **geladen, extrahiert und bereinigt** werden. Hier entstehen die meisten unsichtbaren Fehler:\n\n- **PDF-Extraktion** zerreißt Tabellen, vertauscht Spalten oder verliert Kopfzeilen.\n- **Boilerplate** (Navigation, Cookie-Banner, Fußzeilen) erzeugt Rauschen, das bei jeder Suche mit-matcht.\n- **Duplikate** (dieselbe FAQ auf drei Seiten) verdrängen andere relevante Treffer aus den top-k.\n- **Kodierungsfehler** (z. B. „Ã¤“ statt „ä“) verhindern Treffer bei der Stichwortsuche.\n\nZur Ingestion gehört auch das Erfassen von **Metadaten**: Quelle, Veröffentlichungsdatum, Version, Gültigkeitsbeginn, Nachfolger-Dokument, Sprache, Zugriffsrechte. Diese Felder sind später Gold wert – für Filter, Freshness und Zitate.\n\n> **Merksatz:** Garbage in, garbage retrieved.",
+      "key_points": [
+        "Extraktion und Bereinigung bestimmen die Obergrenze der Qualität.",
+        "Duplikate und Boilerplate entfernen.",
+        "Metadaten (Datum, Version, Rechte) direkt bei der Ingestion erfassen."
+      ],
+      "visual": "pipeline"
+    },
+    {
+      "heading": "Chunking-Strategien",
+      "body_md": "Ein Embedding-Modell und der Kontext des LLM haben begrenzte Länge, und kleine Einheiten lassen sich präziser finden. Deshalb werden Dokumente in **Chunks** zerlegt.\n\n- **Fixed-Size**: alle *n* Zeichen/Tokens schneiden. Einfach, schnell – zerschneidet aber Sätze und Tabellenzeilen.\n- **Satzbasiert**: an Satzgrenzen schneiden und Sätze bis zur Zielgröße zusammenfassen. Inhaltlich sauberer.\n- **Rekursiv**: zuerst an Absätzen, dann an Sätzen, dann an Wörtern teilen, bis jedes Stück unter die Maximalgröße passt. Guter Standard für Fließtext.\n- **Strukturbasiert**: an Überschriften, Markdown-Abschnitten, Tabellenzeilen oder Code-Funktionen schneiden.\n- **Semantisch**: Grenzen dort, wo sich die Embedding-Ähnlichkeit aufeinanderfolgender Sätze stark ändert.\n\n```python\ndef fixed_chunks(text, size=300, overlap=50):\n    step = size - overlap\n    return [text[i:i + size] for i in range(0, len(text), step)]\n```\n\n**Typischer Fehler:** Ein Preisblatt fixed-size schneiden, sodass „Pro-Plan:“ im einen Chunk und „16,90 €“ im nächsten landet. Die Frage nach dem Pro-Preis findet dann den Chunk *ohne* Preis.",
+      "key_points": [
+        "Fixed-Size ist einfach, zerschneidet aber Sinneinheiten.",
+        "Rekursiv/strukturbasiert respektiert Absätze und Sätze.",
+        "Chunk-Grenzen entscheiden, ob Fakt und Bezug zusammenbleiben."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Chunk-Größe und Overlap",
+      "body_md": "Die Chunk-Größe ist ein **Trade-off**:\n\n| klein (z. B. 150 Zeichen) | groß (z. B. 1500 Zeichen) |\n|---|---|\n| präzise Treffer | mehr Kontext pro Treffer |\n| Fakt kann vom Bezug getrennt sein | Embedding „verwässert“ (viele Themen in einem Vektor) |\n| mehr Chunks → größerer Index | weniger Chunks passen ins Kontextbudget |\n\n**Overlap** (Überlappung) wiederholt das Ende eines Chunks am Anfang des nächsten. So geht ein Satz, der genau an der Grenze liegt, nicht verloren. Übliche Werte: 10–20 % der Chunk-Größe. Zu viel Overlap erzeugt Duplikate in den top-k.\n\nEine bewährte Technik ist **Parent-Child-Retrieval** (auch „Small-to-Big“): Suche über kleine Chunks (präzise), gib dem LLM aber den umgebenden größeren Abschnitt (vollständig).\n\n> **Merksatz:** Klein suchen, groß lesen.",
+      "key_points": [
+        "Kleine Chunks = präzise, große = kontextreich.",
+        "Overlap 10–20 % schützt Grenzsätze.",
+        "Parent-Child: klein suchen, groß lesen."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Metadaten und Chunk-Anreicherung",
+      "body_md": "Ein Chunk ohne Kontext ist oft mehrdeutig: *„Der Preis beträgt 29,00 € pro Nutzer.“* – Welcher Plan? Welches Jahr?\n\nAbhilfe:\n- **Kontext-Header**: Titel und Abschnittsüberschrift an jeden Chunk voranstellen: `Preisblatt 2026 > Business-Plan: Der Preis beträgt …`\n- **Metadaten speichern**: `doc_id`, `date`, `version`, `superseded_by`, `source`, `acl`. Sie werden nicht eingebettet, aber für Filter und Zitate genutzt.\n- **Kontextuelle Chunk-Beschreibungen**: Ein LLM fasst vor dem Einbetten in einem Satz zusammen, wo der Chunk im Dokument steht. Das verbessert Retrieval deutlich, kostet aber einmalig LLM-Aufrufe pro Chunk.\n\n```python\nchunk = {\n    \"id\": \"d04#2\", \"doc_id\": \"d04\",\n    \"text\": \"NovaCloud Preisblatt 2026 > Pro-Plan: 16,90 € pro Monat ...\",\n    \"date\": \"2026-03-01\", \"version\": \"4.0\", \"superseded_by\": None,\n}\n```",
+      "key_points": [
+        "Chunks brauchen Kontext (Titel/Abschnitt).",
+        "Metadaten ermöglichen Filter, Freshness und Zitate.",
+        "Anreicherung kostet einmalig, spart bei jeder Suche."
+      ],
+      "visual": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l02t01",
+      "type": "quiz",
+      "title": "Warum überhaupt Chunking?",
+      "prompt": "Welche Aussage über Chunking ist **falsch**?",
+      "xp": 15,
+      "difficulty": 1,
+      "explanation": "Chunk-Größe ist ein Trade-off. Siehe *Chunk-Größe und Overlap*.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Kleinere Chunks ermöglichen präzisere Treffer."
+        },
+        {
+          "id": "b",
+          "text": "Ein Embedding über ein ganzes 40-seitiges Handbuch mittelt viele Themen und wird unspezifisch."
+        },
+        {
+          "id": "c",
+          "text": "Je größer die Chunks, desto besser ist das Retrieval immer."
+        },
+        {
+          "id": "d",
+          "text": "Chunk-Grenzen können einen Fakt von seinem Bezug trennen."
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "c"
+        ],
+        "option_explanations": {
+          "a": "Richtig – kleine Chunks enthalten weniger Rauschen.",
+          "b": "Richtig – das Embedding „verwässert“.",
+          "c": "Falsch – zu große Chunks verwässern Embeddings und fressen Kontextbudget. Es gibt kein „immer“.",
+          "d": "Richtig – z. B. „Pro-Plan:“ und „16,90 €“ in verschiedenen Chunks."
+        }
+      }
+    },
+    {
+      "id": "l02t02",
+      "type": "code",
+      "title": "Fixed-Size-Chunking mit Overlap",
+      "prompt": "Vervollständige die Funktion, die einen Text in Chunks der Länge `size` mit `overlap` Zeichen Überlappung zerlegt.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Die Schrittweite ist `size - overlap`: Jeder neue Chunk beginnt `overlap` Zeichen vor dem Ende des vorherigen. Der Ausschnitt ist `text[start:start + size]`. Ist `overlap >= size`, wäre die Schrittweite ≤ 0 – in echtem Code sollte man das abfangen.",
+      "language": "python",
+      "template": "def chunk_text(text, size=300, overlap=50):\n    step = {{1}}\n    chunks = []\n    for start in range(0, len(text), step):\n        chunks.append({{2}})\n        if start + size >= len(text):\n            break\n    return chunks",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Schrittweite"
+        },
+        {
+          "id": "2",
+          "placeholder": "Ausschnitt"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "size - overlap",
+            "size-overlap",
+            "(size - overlap)"
+          ],
+          "2": [
+            "text[start:start + size]",
+            "text[start:start+size]",
+            "text[start : start + size]"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l02t03",
+      "type": "better",
+      "title": "Chunking für ein Preisblatt",
+      "prompt": "Was wäre besser?",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Siehe *Chunking-Strategien* und *Metadaten und Chunk-Anreicherung*.",
+      "scenario": "Das Preisblatt 2026 besteht aus kurzen Absätzen pro Plan („Pro-Plan: 16,90 € pro Monat, 2 TB …“). Nutzer fragen vor allem nach Preis und Speicher *eines* Plans.",
+      "variant_a": {
+        "label": "Fixed 1500 Zeichen, kein Overlap",
+        "description": "Das ganze Preisblatt landet in einem einzigen Chunk."
+      },
+      "variant_b": {
+        "label": "Rekursiv ~300 Zeichen, 50 Overlap, Titel-Header",
+        "description": "Ein Chunk pro Plan-Absatz, jeweils mit „NovaCloud Preisblatt 2026 >“ vorangestellt."
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**Variante B** ist für diese Fragen besser: Jeder Plan steht in einem eigenen, präzisen Chunk, und der Titel-Header verhindert, dass „16,90 €“ ohne Jahr/Plan-Bezug im Kontext steht. Overlap schützt Sätze an Grenzen.\n\n*Trade-off:* Variante A ist nicht völlig falsch – bei sehr kurzen Dokumenten kann ein einziger Chunk sogar robuster sein, weil nichts zerschnitten wird, und Vergleichsfragen („Was ist der Unterschied zwischen Pro und Business?“) profitieren von viel Kontext. Dann aber besser mit Parent-Child-Retrieval: klein suchen, groß lesen."
+      }
+    },
+    {
+      "id": "l02t04",
+      "type": "tune",
+      "title": "Finde die maximale Dateigröße",
+      "prompt": "Die Frage lautet: **„Wie groß darf eine einzelne Datei maximal sein?“** Die gültige Antwort steht in einem bestimmten Hilfe-Center-Artikel. Stelle Chunk-Größe und *k* so ein, dass der richtige Artikel sicher unter den Treffern ist.",
+      "xp": 40,
+      "difficulty": 2,
+      "explanation": "Mit sehr kleinen Chunks und k = 1 gewinnt oft ein Fragment aus dem **veralteten** Artikel 2024 (10 GB) oder ein anderer Treffer. Größere Chunks halten „maximale Größe“ und „50 GB“ zusammen, und ein höheres *k* holt den gültigen Artikel 2026 sicher in den Kontext. Ob danach die veraltete Version aussortiert wird, ist eine Frage der Freshness (Level 9).",
+      "hint": "Erhöhe zuerst k, dann die Chunk-Größe.",
+      "query": "Wie groß darf eine einzelne Datei maximal sein?",
+      "params": [
+        {
+          "name": "chunking.size",
+          "label": "Chunk-Größe (Zeichen)",
+          "min": 100,
+          "max": 1200,
+          "step": 50,
+          "default": 150
+        },
+        {
+          "name": "retrieval.k",
+          "label": "Anzahl Treffer k",
+          "min": 1,
+          "max": 8,
+          "step": 1,
+          "default": 1
+        }
+      ],
+      "target": {
+        "metric": "recall_at_k",
+        "threshold": 0.99,
+        "label": "Recall@k ≥ 99 %"
+      },
+      "base_config": {
+        "query": "Wie groß darf eine einzelne Datei maximal sein?",
+        "corpus": "default",
+        "chunking": {
+          "strategy": "recursive",
+          "size": 150,
+          "overlap": 30
+        },
+        "retrieval": {
+          "method": "bm25",
+          "k": 1,
+          "mmr": false,
+          "mmr_lambda": 0.7,
+          "rerank": false
+        },
+        "freshness": {
+          "enabled": false,
+          "half_life_days": 365,
+          "drop_superseded": false,
+          "as_of": "2026-11-16"
+        },
+        "generation": {
+          "mode": "extractive",
+          "strict_grounding": true,
+          "abstain_threshold": 0.2,
+          "require_citations": true
+        },
+        "verify": true
+      },
+      "solution": {
+        "relevant_doc_ids": [
+          "d26"
+        ],
+        "example_params": {
+          "chunking.size": 400,
+          "retrieval.k": 5
+        }
+      }
+    },
+    {
+      "id": "l02t05",
+      "type": "order",
+      "title": "Ingestion-Pipeline",
+      "prompt": "Sortiere die Schritte der Indexierung.",
+      "xp": 25,
+      "difficulty": 1,
+      "explanation": "Metadaten werden vor dem Chunking erfasst, damit jeder Chunk sie erbt. Eingebettet wird erst der fertige Chunk.",
+      "visual": "pipeline",
+      "items": [
+        {
+          "id": "load",
+          "text": "Dokumente laden (PDF, HTML, Markdown)"
+        },
+        {
+          "id": "clean",
+          "text": "Text extrahieren und Boilerplate/Duplikate entfernen"
+        },
+        {
+          "id": "meta",
+          "text": "Metadaten erfassen (Datum, Version, Rechte)"
+        },
+        {
+          "id": "chunk",
+          "text": "In Chunks zerlegen"
+        },
+        {
+          "id": "emb",
+          "text": "Chunks einbetten"
+        },
+        {
+          "id": "store",
+          "text": "Vektoren mit Metadaten im Index speichern"
+        }
+      ],
+      "solution": {
+        "order": [
+          "load",
+          "clean",
+          "meta",
+          "chunk",
+          "emb",
+          "store"
+        ]
+      }
+    },
+    {
+      "id": "l02t06",
+      "type": "explain",
+      "title": "Warum Overlap?",
+      "prompt": "Erkläre kurz.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Siehe *Chunk-Größe und Overlap*.",
+      "question": "Wozu dient Overlap beim Chunking, und was passiert, wenn man ihn zu groß wählt?",
+      "solution": {
+        "rubric": [
+          {
+            "concept": "Informationen an Chunk-Grenzen bleiben erhalten",
+            "keywords": [
+              "grenze",
+              "zerschnitten",
+              "zerschneid",
+              "getrennt",
+              "satz",
+              "übergang"
+            ]
+          },
+          {
+            "concept": "Kontext wird wiederholt/überlappt",
+            "keywords": [
+              "wiederhol",
+              "überlapp",
+              "doppelt",
+              "vorheri",
+              "nächst"
+            ]
+          },
+          {
+            "concept": "Zu viel Overlap erzeugt Redundanz/Duplikate",
+            "keywords": [
+              "redundan",
+              "duplikat",
+              "doppelt",
+              "dopplung",
+              "mehrfach"
+            ]
+          },
+          {
+            "concept": "Kosten: größerer Index bzw. verschwendetes Kontextbudget",
+            "keywords": [
+              "kosten",
+              "speicher",
+              "index",
+              "budget",
+              "platz",
+              "tokens"
+            ]
+          }
+        ],
+        "model_answer": "Overlap wiederholt das Ende eines Chunks am Anfang des nächsten. Dadurch geht ein Satz oder Fakt, der genau auf einer Chunk-Grenze liegt, nicht verloren – er steht vollständig in mindestens einem Chunk.\n\nIst der Overlap zu groß, enthalten benachbarte Chunks weitgehend denselben Text: Der Index wächst, und in den top-k landen fast identische Chunks (Redundanz), die wertvolles Kontextbudget belegen und andere relevante Treffer verdrängen. Üblich sind 10–20 % der Chunk-Größe.",
+        "pass_ratio": 0.6
+      }
+    }
+  ]
+}

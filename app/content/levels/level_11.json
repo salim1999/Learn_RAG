@@ -1,0 +1,338 @@
+{
+  "id": 11,
+  "title": "Query-Transformation",
+  "subtitle": "Rewriting, HyDE, Multi-Query und Decomposition",
+  "icon": "🔄",
+  "color": "#9b8cff",
+  "theory": [
+    {
+      "heading": "Warum die Frage umformen?",
+      "body_md": "Die Nutzerfrage ist selten die beste Suchanfrage:\n- **Vokabular-Lücke:** „Wie lange hab ich Zeit, was Gelöschtes zurückzuholen?“ – im Dokument steht „Papierkorb“ und „30 Tage“.\n- **Kontextabhängigkeit:** „Und was kostet der?“ – *der* bezieht sich auf die vorige Nachricht.\n- **Mehrteiligkeit:** „Was kostet Business und welche Verfügbarkeit ist garantiert?“ – zwei Themen, zwei Dokumente.\n- **Rauschen:** Grußformeln, Emotionen, Tippfehler.\n\n**Query-Transformation** erzeugt aus der Nutzerfrage eine oder mehrere bessere Suchanfragen – meist mit einem kleinen, schnellen LLM. Die *Antwort* bezieht sich weiterhin auf die Originalfrage.",
+      "key_points": [
+        "Nutzerfrage ≠ beste Suchanfrage.",
+        "Vokabular, Kontext, Mehrteiligkeit, Rauschen.",
+        "Transformation fürs Retrieval, Originalfrage für die Antwort."
+      ],
+      "visual": "pipeline"
+    },
+    {
+      "heading": "Rewriting und Conversational Condensing",
+      "body_md": "**Rewriting:** Die Frage wird in eine eigenständige, präzise Suchanfrage umformuliert.\n\n**Conversational Condensing:** Im Chat wird aus Verlauf + Folgefrage eine **eigenständige Frage**:\n\n```text\nVerlauf: „Welche Pläne bietet NovaCloud an?“ → „Starter, Pro, Business, Enterprise.“\nFolgefrage: „Und was kostet der zweite?“\nUmformuliert: „Was kostet der Pro-Plan von NovaCloud pro Monat?“\n```\n\n```python\nREWRITE = (\"Formuliere die letzte Nutzerfrage als eigenständige Suchanfrage. \"\n           \"Löse Pronomen mithilfe des Verlaufs auf. Erfinde keine Fakten.\\n\"\n           \"Verlauf:\\n{verlauf}\\nFrage: {frage}\\nSuchanfrage:\")\n```\n\n**Fallstrick:** Der Rewriter „verbessert“ die Frage inhaltlich („…kostet der Pro-Plan 16,90 €?“) – dann sucht man nach der Antwort, die man erst finden wollte. Rewriter dürfen keine Fakten hinzufügen.",
+      "key_points": [
+        "Folgefragen in eigenständige Fragen umwandeln.",
+        "Pronomen auflösen.",
+        "Rewriter darf keine Fakten erfinden."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "HyDE: Hypothetische Dokumente",
+      "body_md": "**HyDE (Hypothetical Document Embeddings)**: Statt der kurzen Frage wird eine **hypothetische Antwort** eingebettet, die ein LLM ohne Kontext schreibt. Die Idee: Eine Antwort ähnelt einem Dokument stilistisch und inhaltlich mehr als eine Frage.\n\n```python\nhypo = llm(\"Schreibe einen kurzen Absatz aus einer Firmendoku, der die Frage beantwortet: \" + frage)\nvec = embed(hypo)\ntreffer = index.search(vec, k=10)\n```\n\nDie hypothetische Antwort darf **falsch** sein („Gelöschte Dateien bleiben 60 Tage …“) – sie dient nur als Suchvektor und wird **nie** dem Nutzer gezeigt.\n\nStärken: Fragen mit großer Vokabular-Lücke, Dense-Retrieval.\nSchwächen: zusätzlicher LLM-Aufruf (Latenz), wenig Nutzen bei exakten Kennungen, und bei völlig unbekannten Domänen kann die Hypothese in die falsche Richtung führen.",
+      "key_points": [
+        "Hypothetische Antwort statt Frage einbetten.",
+        "Hypothese darf falsch sein, wird nie gezeigt.",
+        "Hilft bei Vokabular-Lücken, kostet Latenz."
+      ],
+      "visual": "vectorspace"
+    },
+    {
+      "heading": "Multi-Query und Decomposition",
+      "body_md": "**Multi-Query:** Ein LLM erzeugt 3–5 Umformulierungen derselben Frage; jede wird gesucht, die Ergebnisse werden fusioniert (z. B. per RRF – „RAG-Fusion“). Erhöht den Recall, weil verschiedene Formulierungen verschiedene Chunks treffen.\n\n**Decomposition:** Komplexe Fragen werden in **Teilfragen** zerlegt, die einzeln beantwortet werden:\n\n```text\n„Was kostet Business und welche Verfügbarkeit ist garantiert?“\n → T1: „Was kostet der Business-Plan?“        → Preisblatt 2026\n → T2: „Welche Verfügbarkeit garantiert das SLA für Business?“ → SLA 2025\n```\n\nBei **Multi-Hop-Fragen** hängt Teilfrage 2 vom Ergebnis von Teilfrage 1 ab („Wer ist CTO, und welche Dokumente hat diese Person verantwortet?“) – dann sequentiell statt parallel.\n\n**Step-Back-Prompting:** Zusätzlich eine allgemeinere Frage stellen („Welche Regeln gelten für API-Versionen?“), um Hintergrundwissen abzurufen.\n\n**Kosten:** Jede Teilfrage = ein Retrieval (+ ggf. LLM-Aufruf). Nur einsetzen, wo die Frage es braucht.",
+      "key_points": [
+        "Multi-Query: viele Formulierungen, ein fusioniertes Ergebnis.",
+        "Decomposition: Teilfragen, parallel oder sequentiell.",
+        "Mehr Recall gegen mehr Kosten."
+      ],
+      "visual": "agents"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l11t01",
+      "type": "quiz",
+      "title": "Die Folgefrage",
+      "prompt": "Im Chat: *„Welche Rollen gibt es bei NovaCloud?“* → Antwort → *„Und ab welchem Plan gibt es SSO dafür?“* Welche Technik löst das Retrieval-Problem der zweiten Frage am direktesten?",
+      "xp": 15,
+      "difficulty": 1,
+      "explanation": "Siehe *Rewriting und Conversational Condensing*.",
+      "options": [
+        {
+          "id": "a",
+          "text": "HyDE"
+        },
+        {
+          "id": "b",
+          "text": "Conversational Condensing (Folgefrage in eigenständige Frage umschreiben)"
+        },
+        {
+          "id": "c",
+          "text": "MMR"
+        },
+        {
+          "id": "d",
+          "text": "Höheres k"
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "b"
+        ],
+        "option_explanations": {
+          "a": "HyDE hilft bei Vokabular-Lücken, nicht beim fehlenden Bezug.",
+          "b": "Richtig – „dafür“ muss mit dem Verlauf aufgelöst werden.",
+          "c": "MMR diversifiziert Treffer, löst aber keinen Bezug auf.",
+          "d": "Mehr Treffer zu einer unklaren Frage bleiben unklar."
+        }
+      }
+    },
+    {
+      "id": "l11t02",
+      "type": "better",
+      "title": "HyDE für einen Fehlercode?",
+      "prompt": "Was wäre besser?",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Siehe *HyDE: Hypothetische Dokumente*.",
+      "scenario": "Ein Entwickler fragt: *„Was bedeutet der Header X-Nova-Signature?“* Das Retrieval ist hybrid (BM25 + Dense).",
+      "variant_a": {
+        "label": "HyDE",
+        "description": "Ein LLM schreibt eine hypothetische Antwort, die dann eingebettet wird."
+      },
+      "variant_b": {
+        "label": "Originalfrage direkt suchen",
+        "description": "Die Frage mit dem exakten Header-Namen geht direkt in die Hybrid-Suche."
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**B**: Der exakte Token „X-Nova-Signature“ ist für BM25 ein perfekter Anker. HyDE kostet einen LLM-Aufruf und erzeugt einen Text, der den Header womöglich falsch erklärt und so die Dense-Suche auf andere Themen lenkt – der lexikalische Treffer bleibt nur erhalten, wenn die Hypothese den Namen wörtlich wiederholt.\n\n*Trade-off:* Für vage, umgangssprachliche Fragen („Wie sichere ich ab, dass Benachrichtigungen echt sind?“) wäre HyDE hilfreich. Viele Systeme wenden Transformationen deshalb **bedingt** an – z. B. nur, wenn das erste Retrieval schwache Scores liefert."
+      }
+    },
+    {
+      "id": "l11t03",
+      "type": "order",
+      "title": "Decomposition-Ablauf",
+      "prompt": "Sortiere die Schritte für die Frage: *„Ab wann wird API v2 abgeschaltet, und welche Rate-Limits gelten in der Nachfolgeversion für den Pro-Plan?“*",
+      "xp": 25,
+      "difficulty": 2,
+      "explanation": "Das ist eine **Multi-Hop**-Frage: Teilfrage 2 hängt von der Antwort auf Teilfrage 1 ab, deshalb sequentiell.",
+      "visual": "agents",
+      "items": [
+        {
+          "id": "split",
+          "text": "Frage in Teilfragen zerlegen"
+        },
+        {
+          "id": "q1",
+          "text": "Teilfrage 1 suchen: Abschaltdatum von API v2"
+        },
+        {
+          "id": "hop",
+          "text": "Aus dem Ergebnis die Nachfolgeversion (v3) bestimmen"
+        },
+        {
+          "id": "q2",
+          "text": "Teilfrage 2 suchen: Rate-Limits v3 für Pro"
+        },
+        {
+          "id": "syn",
+          "text": "Teilantworten mit Zitaten zu einer Antwort zusammenführen"
+        }
+      ],
+      "solution": {
+        "order": [
+          "split",
+          "q1",
+          "hop",
+          "q2",
+          "syn"
+        ]
+      }
+    },
+    {
+      "id": "l11t04",
+      "type": "code",
+      "title": "Multi-Query zusammenführen",
+      "prompt": "Führe die Treffer mehrerer Suchanfragen zusammen und entferne Duplikate (Reihenfolge des ersten Auftretens bleibt).",
+      "xp": 25,
+      "difficulty": 1,
+      "explanation": "Ohne Deduplizierung füllen dieselben Chunks aus mehreren Anfragen das Kontextbudget. In der Praxis fusioniert man zusätzlich per RRF, um die Reihenfolge zu verbessern.",
+      "language": "python",
+      "template": "def multi_query_retrieve(queries, search, k=5):\n    seen, merged = set(), []\n    for q in queries:\n        for c in search(q, k):\n            if {{1}}:\n                seen.add(c[\"id\"])\n                merged.append(c)\n    return merged",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Duplikat-Check"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "c[\"id\"] not in seen",
+            "c['id'] not in seen",
+            "not c['id'] in seen",
+            "not c[\"id\"] in seen"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l11t05",
+      "type": "explain",
+      "title": "Wie funktioniert HyDE?",
+      "prompt": "Erkläre kurz.",
+      "xp": 40,
+      "difficulty": 2,
+      "explanation": "Siehe *HyDE: Hypothetische Dokumente*.",
+      "question": "Wie funktioniert HyDE, warum kann es das Retrieval verbessern, und warum ist es unkritisch, wenn die hypothetische Antwort falsch ist?",
+      "solution": {
+        "rubric": [
+          {
+            "concept": "Hypothetische Antwort/Dokument per LLM erzeugen",
+            "keywords": [
+              "hypothet",
+              "fiktiv",
+              "erzeugt",
+              "generiert",
+              "llm schreibt",
+              "antwortentwurf"
+            ]
+          },
+          {
+            "concept": "Diese Hypothese wird eingebettet statt der Frage",
+            "keywords": [
+              "einbett",
+              "embedding",
+              "vektor",
+              "statt der frage",
+              "suchvektor"
+            ]
+          },
+          {
+            "concept": "Hypothese ähnelt Dokumenten mehr als die kurze Frage",
+            "keywords": [
+              "ähnel",
+              "stil",
+              "vokabular",
+              "dokumentähnlich",
+              "näher"
+            ]
+          },
+          {
+            "concept": "Hypothese wird nur zur Suche genutzt, nicht gezeigt",
+            "keywords": [
+              "nur zur suche",
+              "nicht gezeigt",
+              "nie gezeigt",
+              "nicht angezeigt",
+              "nur für das retrieval",
+              "verworfen",
+              "nur als anfrage"
+            ]
+          }
+        ],
+        "model_answer": "Bei HyDE schreibt ein LLM zuerst eine **hypothetische Antwort** auf die Frage – ohne Kontext. Diese Hypothese wird statt (oder zusätzlich zu) der Frage **eingebettet** und als Suchvektor verwendet.\n\nWeil eine Antwort im Stil und Vokabular realen Dokumenten viel ähnlicher ist als eine kurze Frage, landet der Vektor näher an den relevanten Chunks. Ist die Hypothese inhaltlich falsch (z. B. „60 Tage“ statt „30 Tage“), schadet das kaum: Sie dient **nur zur Suche** und wird nie dem Nutzer gezeigt; die eigentliche Antwort entsteht aus den gefundenen echten Dokumenten.",
+        "pass_ratio": 0.6
+      }
+    },
+    {
+      "id": "l11t06",
+      "type": "boss",
+      "title": "Boss: Die Sphinx der Fragen",
+      "prompt": "Die Sphinx stellt Rätselfragen. Nur wer sie richtig umformt, kommt weiter.",
+      "xp": 100,
+      "difficulty": 3,
+      "explanation": "Die Sphinx gibt den Weg frei: Du formst Fragen gezielt – und nur, wenn es nötig ist.",
+      "visual": "agents",
+      "story": "Die Sphinx bewacht das Tor zum Agentic-RAG-Tempel. Ihre Fragen sind vage, mehrteilig und voller Bezüge. Drei Leben – zeig, dass du jede Frage in eine gute Suchanfrage verwandeln kannst.",
+      "lives": 3,
+      "steps": [
+        {
+          "id": "l11t06s1",
+          "type": "quiz",
+          "title": "Die richtige Technik",
+          "prompt": "„Wie lange hab ich eigentlich Zeit, versehentlich Weggeworfenes zurückzuholen?“ – Das Dense-Retrieval findet nichts Gutes. Welche Technik passt am besten?",
+          "xp": 20,
+          "difficulty": 1,
+          "explanation": "Siehe *Warum die Frage umformen?*",
+          "options": [
+            {
+              "id": "a",
+              "text": "Decomposition"
+            },
+            {
+              "id": "b",
+              "text": "HyDE oder Rewriting zur Überbrückung der Vokabular-Lücke"
+            },
+            {
+              "id": "c",
+              "text": "Höhere Temperatur"
+            },
+            {
+              "id": "d",
+              "text": "Kleinere Chunks"
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "b"
+            ],
+            "option_explanations": {
+              "a": "Die Frage hat nur einen Teil.",
+              "b": "Richtig – „Papierkorb“, „gelöschte Dateien“, „30 Tage“ fehlen in der Frage.",
+              "c": "Hat nichts mit Retrieval zu tun.",
+              "d": "Löst die Vokabular-Lücke nicht."
+            }
+          }
+        },
+        {
+          "id": "l11t06s2",
+          "type": "code",
+          "title": "HyDE-Suchvektor",
+          "prompt": "Vervollständige HyDE: Eingebettet wird die Hypothese, nicht die Frage.",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Der Suchvektor ist das Embedding der Hypothese.",
+          "language": "python",
+          "template": "def hyde_search(frage, llm, embed, index, k=10):\n    hypo = llm(\"Schreibe einen kurzen Doku-Absatz, der beantwortet: \" + frage)\n    vec = embed({{1}})\n    return index.search(vec, k=k)",
+          "blanks": [
+            {
+              "id": "1",
+              "placeholder": "Was wird eingebettet?"
+            }
+          ],
+          "solution": {
+            "blanks": {
+              "1": [
+                "hypo"
+              ]
+            }
+          }
+        },
+        {
+          "id": "l11t06s3",
+          "type": "better",
+          "title": "Immer transformieren?",
+          "prompt": "Was wäre besser?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Transformation ist ein Werkzeug, kein Ritual.",
+          "scenario": "Dein Bot beantwortet viele kurze, präzise Fragen („Was kostet Pro?“) und einige vage, komplexe. Jede Transformation kostet ~400 ms.",
+          "variant_a": {
+            "label": "Immer Multi-Query + HyDE",
+            "description": "Jede Frage wird fünffach umformuliert und zusätzlich per HyDE gesucht."
+          },
+          "variant_b": {
+            "label": "Adaptiv",
+            "description": "Erst direkt suchen; nur bei schwachen Top-Scores oder erkennbar mehrteiligen Fragen transformieren."
+          },
+          "solution": {
+            "correct": "b",
+            "why": "**B** spart Latenz und Kosten bei den vielen einfachen Fragen, ohne die schwierigen zu vernachlässigen. *Trade-off:* Die Entscheidungslogik (Score-Schwelle, Klassifikator) muss kalibriert werden und kann danebenliegen; A ist einfacher zu bauen und maximiert den Recall, wenn Latenz keine Rolle spielt."
+          }
+        }
+      ]
+    }
+  ]
+}

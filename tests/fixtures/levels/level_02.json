@@ -1,0 +1,3 @@
+{"id": 2, "title": "Level Zwei", "subtitle": "gesperrt", "icon": "🔒", "color": "#2bd9a0", "theory": [],
+ "tasks": [{"id": "l02t01", "type": "quiz", "title": "Q", "prompt": "?", "xp": 10, "difficulty": 1, "multi": false,
+            "options": [{"id": "a", "text": "A"}], "explanation": "", "solution": {"correct": ["a"], "option_explanations": {}}}]}

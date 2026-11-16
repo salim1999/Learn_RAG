@@ -1,0 +1,312 @@
+{
+  "id": 1,
+  "title": "Was ist RAG?",
+  "subtitle": "Warum Sprachmodelle Fakten erfinden – und wie Retrieval hilft",
+  "icon": "🧭",
+  "color": "#7c5cff",
+  "theory": [
+    {
+      "heading": "Warum Sprachmodelle halluzinieren",
+      "body_md": "Ein großes Sprachmodell (LLM) ist im Kern ein **Wahrscheinlichkeitsmodell für das nächste Token**. Es wurde darauf trainiert, plausible Fortsetzungen zu erzeugen – nicht darauf, *wahre* Aussagen zu machen. Wenn das Modell eine Antwort nicht sicher „weiß“, erzeugt es trotzdem den flüssigsten Text. Das nennt man **Halluzination**: eine überzeugend formulierte, aber nicht belegte oder falsche Aussage.\n\nTypische Ursachen:\n\n- **Wissenslücken**: Das Wissen war nie in den Trainingsdaten (z. B. interne Firmendokumente von NovaCloud).\n- **Veraltetes Wissen**: Das Training endete an einem *Knowledge Cutoff*. Preise, Limits oder Richtlinien, die sich danach geändert haben, kennt das Modell nicht.\n- **Seltene Fakten**: Zahlen, Namen und Daten, die selten vorkamen, sind im Modell nur unscharf gespeichert („Long-Tail-Wissen“).\n- **Druck zur Antwort**: Ohne ausdrückliche Erlaubnis, „Ich weiß es nicht“ zu sagen, füllt das Modell Lücken mit Plausiblem.\n- **Fehlerhafte oder widersprüchliche Quellen**: Auch korrekt abgerufener Kontext kann falsch, veraltet oder manipuliert sein.\n\n> **Merksatz:** Ein LLM ist ein brillanter Formulierer, aber kein zuverlässiges Nachschlagewerk.\n\n**Typischer Fehler:** Halluzinationen nur mit einem „besseren Modell“ bekämpfen zu wollen. Größere Modelle halluzinieren seltener, aber nie null – besonders bei Fakten, die sie nicht kennen können.",
+      "key_points": [
+        "LLMs optimieren Plausibilität, nicht Wahrheit.",
+        "Knowledge Cutoff und fehlendes Domänenwissen sind Hauptursachen.",
+        "Auch große Modelle halluzinieren bei unbekannten Fakten."
+      ],
+      "visual": "hallucination"
+    },
+    {
+      "heading": "Parametrisches vs. nicht-parametrisches Wissen",
+      "body_md": "**Parametrisches Wissen** steckt in den Gewichten (Parametern) des Modells. Es wurde beim Training „eingebrannt“, ist schnell abrufbar, aber:\n\n- nicht ohne Neutraining aktualisierbar,\n- nicht zitierbar (das Modell weiß nicht, *woher* es etwas weiß),\n- nicht nach Nutzerrechten filterbar.\n\n**Nicht-parametrisches Wissen** liegt außerhalb des Modells – in Dokumenten, Datenbanken oder einem Suchindex. Es wird **zur Laufzeit** abgerufen und dem Modell als Kontext mitgegeben. Vorteile:\n\n- jederzeit aktualisierbar (neues Preisblatt hochladen genügt),\n- mit Quelle, Datum und Version versehen → **zitierbar und prüfbar**,\n- per Zugriffsrechten filterbar.\n\n**Retrieval-Augmented Generation (RAG)** kombiniert beides: Das Modell bringt Sprachverständnis und Allgemeinwissen mit (parametrisch), die Fakten kommen aus abgerufenen Dokumenten (nicht-parametrisch).\n\n| | parametrisch | nicht-parametrisch |\n|---|---|---|\n| Aktualisierung | Training/Fine-Tuning | Index aktualisieren |\n| Quellenangabe | nein | ja |\n| Kosten pro Änderung | hoch | gering |\n\n> **Merksatz:** Fakten gehören in den Index, Fähigkeiten in die Gewichte.",
+      "key_points": [
+        "Parametrisch = in den Gewichten, nicht zitierbar, schwer aktualisierbar.",
+        "Nicht-parametrisch = externe Quellen, zur Laufzeit abgerufen.",
+        "RAG verbindet beides."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Die RAG-Pipeline im Überblick",
+      "body_md": "Eine klassische RAG-Pipeline hat zwei Phasen:\n\n**1. Indexierung (offline)**\n1. Dokumente laden und bereinigen (Ingestion)\n2. In Abschnitte zerlegen (Chunking)\n3. Jeden Chunk in einen Vektor umwandeln (Embedding) bzw. für Stichwortsuche indexieren\n4. Vektoren plus Metadaten (Quelle, Datum, Version, Rechte) speichern\n\n**2. Abfrage (online)**\n1. Nutzerfrage entgegennehmen (ggf. umformulieren)\n2. Relevante Chunks abrufen (Retrieval, top-k)\n3. Optional: neu sortieren (Reranking) und filtern (z. B. veraltete Versionen)\n4. Prompt bauen: Anweisungen + Kontext + Frage\n5. Antwort generieren – mit Zitaten\n6. Antwort prüfen (Verifikation) – oder ablehnen, wenn der Kontext nicht reicht\n\n```python\ndef rag(frage, index, llm, k=4):\n    chunks = index.search(frage, k=k)           # Retrieval\n    kontext = \"\\n\\n\".join(f\"[{c.id}] {c.text}\" for c in chunks)\n    prompt = f\"Antworte nur aus dem Kontext.\\n{kontext}\\n\\nFrage: {frage}\"\n    return llm.generate(prompt)                 # Generation\n```\n\n> **Merksatz:** Die Antwortqualität eines RAG-Systems ist nie besser als sein Retrieval.",
+      "key_points": [
+        "Indexierung offline, Abfrage online.",
+        "Retrieval → (Rerank/Filter) → Prompt → Generierung → Verifikation.",
+        "Schlechtes Retrieval kann kein Prompt retten."
+      ],
+      "visual": "pipeline"
+    },
+    {
+      "heading": "Wann RAG – und wann nicht?",
+      "body_md": "RAG ist die richtige Wahl, wenn\n- sich Wissen **häufig ändert** (Preise, Richtlinien, Release Notes),\n- Antworten **belegbar** sein müssen (Support, Recht, Compliance),\n- Wissen **privat** ist oder **Zugriffsrechte** hat.\n\n**Fine-Tuning** eignet sich eher, um *Verhalten* zu lernen: Tonalität, Ausgabeformat, Fachjargon, eine bestimmte Aufgabe. Fine-Tuning ist kein guter Weg, um sich ändernde Fakten einzuspeisen – das Modell kann sie trotzdem vermischen und nicht belegen.\n\n**Lange Kontextfenster** (100k+ Tokens) machen RAG nicht überflüssig: Kosten und Latenz steigen mit jedem Token, Modelle übersehen Informationen in der Mitte langer Kontexte, und Rechtefilter brauchen trotzdem eine Auswahl.\n\n**Typische Fehler:**\n- „Wir fine-tunen einfach auf unsere Doku“ – und wundern sich über veraltete Preise.\n- RAG ohne Abstain-Option: Findet das Retrieval nichts, halluziniert das Modell trotzdem.",
+      "key_points": [
+        "RAG für veränderliches, belegpflichtiges, privates Wissen.",
+        "Fine-Tuning für Verhalten und Stil.",
+        "Lange Kontexte ersetzen keine gute Auswahl."
+      ],
+      "visual": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l01t01",
+      "type": "quiz",
+      "title": "Wofür steht RAG?",
+      "prompt": "Was beschreibt **Retrieval-Augmented Generation** am besten?",
+      "xp": 10,
+      "difficulty": 1,
+      "explanation": "RAG holt **nicht-parametrisches Wissen** zur Laufzeit in den Kontext. Siehe Abschnitt *Parametrisches vs. nicht-parametrisches Wissen*.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Ein Modell wird regelmäßig auf neuen Dokumenten nachtrainiert."
+        },
+        {
+          "id": "b",
+          "text": "Zur Laufzeit werden passende Dokumente abgerufen und dem Modell als Kontext für die Antwort mitgegeben."
+        },
+        {
+          "id": "c",
+          "text": "Das Modell durchsucht seine eigenen Gewichte nach dem passenden Fakt."
+        },
+        {
+          "id": "d",
+          "text": "Mehrere Modelle stimmen über die beste Antwort ab."
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "b"
+        ],
+        "option_explanations": {
+          "a": "Das ist (kontinuierliches) Fine-Tuning – parametrisch, nicht RAG.",
+          "b": "Genau: Abrufen (Retrieval) + Anreichern des Prompts (Augmented) + Antwort erzeugen (Generation).",
+          "c": "Gewichte sind nicht durchsuchbar wie ein Index; das wäre parametrisches Erinnern.",
+          "d": "Das ist Ensembling/Self-Consistency, kein Retrieval."
+        }
+      }
+    },
+    {
+      "id": "l01t02",
+      "type": "quiz",
+      "title": "Ursachen von Halluzinationen",
+      "prompt": "Welche Faktoren begünstigen Halluzinationen? (Mehrfachauswahl)",
+      "xp": 20,
+      "difficulty": 2,
+      "explanation": "Halluzinationen entstehen aus **Wissenslücken, Antwortdruck und schlechten Quellen**. Temperatur beeinflusst Variabilität, nicht Wahrheit.",
+      "visual": "hallucination",
+      "options": [
+        {
+          "id": "a",
+          "text": "Die gefragte Information liegt nach dem Knowledge Cutoff des Modells."
+        },
+        {
+          "id": "b",
+          "text": "Der Prompt erlaubt nicht, „Ich weiß es nicht“ zu antworten."
+        },
+        {
+          "id": "c",
+          "text": "Die Frage betrifft einen seltenen Fakt (z. B. eine interne Telefonnummer)."
+        },
+        {
+          "id": "d",
+          "text": "Die Temperatur ist auf 0 gesetzt."
+        },
+        {
+          "id": "e",
+          "text": "Der abgerufene Kontext enthält eine veraltete Version eines Dokuments."
+        }
+      ],
+      "multi": true,
+      "solution": {
+        "correct": [
+          "a",
+          "b",
+          "c",
+          "e"
+        ],
+        "option_explanations": {
+          "a": "Richtig – das Modell kennt neuere Fakten schlicht nicht.",
+          "b": "Richtig – ohne Abstain-Option füllt das Modell Lücken mit Plausiblem.",
+          "c": "Richtig – Long-Tail-Fakten sind im Modell nur unscharf gespeichert.",
+          "d": "Temperatur 0 macht die Ausgabe deterministischer, verhindert aber keine Halluzination – und verursacht sie auch nicht.",
+          "e": "Richtig – das Modell gibt dann korrekt wieder, was falsch (veraltet) ist."
+        }
+      }
+    },
+    {
+      "id": "l01t03",
+      "type": "order",
+      "title": "Bringe die RAG-Abfrage in Reihenfolge",
+      "prompt": "Sortiere die Schritte einer RAG-Abfrage (online) von der Frage bis zur geprüften Antwort.",
+      "xp": 25,
+      "difficulty": 1,
+      "explanation": "Retrieval kommt vor dem Prompt-Bau, Verifikation ganz am Ende. Siehe *Die RAG-Pipeline im Überblick*.",
+      "visual": "pipeline",
+      "items": [
+        {
+          "id": "q",
+          "text": "Nutzerfrage entgegennehmen"
+        },
+        {
+          "id": "r",
+          "text": "Relevante Chunks abrufen (top-k)"
+        },
+        {
+          "id": "f",
+          "text": "Reranken und veraltete Versionen filtern"
+        },
+        {
+          "id": "p",
+          "text": "Prompt aus Anweisungen, Kontext und Frage bauen"
+        },
+        {
+          "id": "g",
+          "text": "Antwort mit Zitaten generieren"
+        },
+        {
+          "id": "v",
+          "text": "Antwort gegen den Kontext verifizieren"
+        }
+      ],
+      "solution": {
+        "order": [
+          "q",
+          "r",
+          "f",
+          "p",
+          "g",
+          "v"
+        ]
+      }
+    },
+    {
+      "id": "l01t04",
+      "type": "better",
+      "title": "Fine-Tuning oder RAG für Preise?",
+      "prompt": "Was wäre besser?",
+      "xp": 25,
+      "difficulty": 2,
+      "explanation": "Fakten gehören in den Index, Verhalten in die Gewichte. Siehe *Wann RAG – und wann nicht?*",
+      "scenario": "NovaCloud hat seit 2022 **vier Preisblätter** veröffentlicht; der Pro-Plan kostete nacheinander 9,90 €, 12,90 €, 14,90 € und jetzt 16,90 €. Der Support-Chatbot soll Preisfragen korrekt und mit Quelle beantworten. Preise ändern sich etwa einmal pro Jahr.",
+      "variant_a": {
+        "label": "Fine-Tuning",
+        "description": "Ein Modell wird auf allen Preisblättern fine-getunt und nach jeder Preisänderung erneut trainiert."
+      },
+      "variant_b": {
+        "label": "RAG mit Metadaten",
+        "description": "Preisblätter werden mit Datum und Version indexiert; der Bot ruft das passende Blatt ab und zitiert es."
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**RAG ist hier klar besser.** Preise sind sich ändernde Fakten mit Belegpflicht. Ein fine-getuntes Modell hat alle vier Preise „gesehen“ und kann sie vermischen; es kann keine Quelle nennen, und jedes Update erfordert neues Training. RAG aktualisiert man durch Austausch eines Dokuments, und über Datum/Version lässt sich die gültige Fassung auswählen.\n\n*Trade-off:* RAG braucht eine saubere Versionierung im Index – sonst landet auch dort das alte Preisblatt im Kontext (→ Level 9). Fine-Tuning wäre sinnvoll, wenn der Bot z. B. einen bestimmten Tonfall lernen soll."
+      }
+    },
+    {
+      "id": "l01t05",
+      "type": "spot",
+      "title": "Erste Halluzinationsjagd",
+      "prompt": "Ein Chatbot **ohne** RAG wurde gefragt: *„Wie lange bleiben gelöschte Dateien bei NovaCloud im Papierkorb?“* Der Kontext unten ist die aktuelle Richtlinie. Markiere alle Sätze der Antwort, die **nicht** durch den Kontext gedeckt sind.",
+      "xp": 25,
+      "difficulty": 1,
+      "explanation": "s2 ist gedeckt. s1 ist **veraltetes Wissen**, s3 eine **Erfindung**. Beides sind klassische Halluzinationsursachen aus Abschnitt 1.",
+      "visual": "hallucination",
+      "context": [
+        {
+          "id": "c1",
+          "text": "Gelöschte Dateien verbleiben nur noch 30 Tage im Papierkorb und werden danach endgültig gelöscht. (Datenaufbewahrung & DSGVO-Richtlinie 2025)"
+        },
+        {
+          "id": "c2",
+          "text": "Kundendaten werden ausschließlich in Rechenzentren in Frankfurt am Main und Nürnberg gespeichert."
+        }
+      ],
+      "answer_sentences": [
+        {
+          "id": "s1",
+          "text": "Gelöschte Dateien bleiben 90 Tage im Papierkorb."
+        },
+        {
+          "id": "s2",
+          "text": "Danach werden sie endgültig gelöscht."
+        },
+        {
+          "id": "s3",
+          "text": "Gegen Aufpreis kann die Frist auf ein Jahr verlängert werden."
+        }
+      ],
+      "solution": {
+        "hallucinated": [
+          "s1",
+          "s3"
+        ],
+        "notes": {
+          "s1": "Der Kontext nennt 30 Tage. 90 Tage stammen aus der veralteten Richtlinie von 2022 – typisches veraltetes parametrisches Wissen.",
+          "s3": "Eine Verlängerung gegen Aufpreis wird nirgends erwähnt – frei erfunden."
+        }
+      }
+    },
+    {
+      "id": "l01t06",
+      "type": "explain",
+      "title": "Erkläre den Unterschied",
+      "prompt": "Erkläre in eigenen Worten.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Gute Antworten nennen Gewichte vs. externe Quellen, Aktualität und Belegbarkeit.",
+      "question": "Was ist der Unterschied zwischen parametrischem und nicht-parametrischem Wissen, und warum reduziert RAG Halluzinationen?",
+      "solution": {
+        "rubric": [
+          {
+            "concept": "Parametrisches Wissen steckt in den Modellgewichten",
+            "keywords": [
+              "gewicht",
+              "parameter",
+              "training",
+              "trainiert",
+              "eingebrannt",
+              "im modell"
+            ]
+          },
+          {
+            "concept": "Nicht-parametrisches Wissen kommt aus externen Quellen zur Laufzeit",
+            "keywords": [
+              "extern",
+              "dokument",
+              "datenbank",
+              "index",
+              "laufzeit",
+              "abgerufen",
+              "abrufen",
+              "retrieval"
+            ]
+          },
+          {
+            "concept": "Aktualisierbarkeit / Aktualität",
+            "keywords": [
+              "aktuali",
+              "veraltet",
+              "cutoff",
+              "neu",
+              "ändern",
+              "änderung"
+            ]
+          },
+          {
+            "concept": "Belegbarkeit durch Quellen/Zitate",
+            "keywords": [
+              "quelle",
+              "zitat",
+              "zitier",
+              "beleg",
+              "nachprüf",
+              "prüfbar"
+            ]
+          }
+        ],
+        "model_answer": "**Parametrisches Wissen** ist während des Trainings in die Gewichte des Modells eingeflossen. Es ist fest, endet am Knowledge Cutoff und ist nicht zitierbar. **Nicht-parametrisches Wissen** liegt in externen Dokumenten oder Datenbanken und wird zur Laufzeit abgerufen.\n\nRAG reduziert Halluzinationen, weil das Modell die Fakten aus aktuellem, abgerufenem Kontext übernimmt statt aus unscharfer Erinnerung – und weil jede Aussage mit einer Quelle belegt und geprüft werden kann. Ganz verhindert RAG Halluzinationen nicht: Schlechtes Retrieval oder fehlende Abstain-Regeln führen weiterhin zu Fehlern.",
+        "pass_ratio": 0.6
+      }
+    }
+  ]
+}

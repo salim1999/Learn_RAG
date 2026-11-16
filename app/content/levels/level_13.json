@@ -1,0 +1,367 @@
+{
+  "id": 13,
+  "title": "GraphRAG & strukturierte Daten",
+  "subtitle": "Wann Graph oder SQL statt Vektor?",
+  "icon": "🕸️",
+  "color": "#4cc9f0",
+  "theory": [
+    {
+      "heading": "Wo Vektorsuche an Grenzen stößt",
+      "body_md": "Vektor-Retrieval findet **ähnliche Textstellen**. Viele Fragen sind aber keine Ähnlichkeitsfragen:\n\n- **Aggregation:** „Wie viele Störungen gab es 2025 in Frankfurt?“ – Zählen über viele Datensätze.\n- **Filter/Vergleich:** „Welche Kunden haben mehr als 4 TB belegt?“ – exakte Bedingungen über Zahlen.\n- **Multi-Hop über Beziehungen:** „Welche Dokumente verantwortet die Person, die CTO ist?“\n- **Globale Fragen:** „Was sind die wiederkehrenden Themen in allen Support-Tickets?“ – die Antwort steht in keinem einzelnen Chunk.\n\nTop-k mit k = 5 sieht 5 Chunks – für „Wie viele …?“ über 10.000 Datensätze ist das strukturell falsch, egal wie gut das Embedding ist.\n\n> **Merksatz:** Ähnlichkeit beantwortet „Wo steht etwas darüber?“, nicht „Wie viele?“ oder „Wie hängt das zusammen?“",
+      "key_points": [
+        "Aggregation, Filter, Multi-Hop, globale Fragen.",
+        "Top-k sieht nur k Ausschnitte.",
+        "Fragetyp bestimmt die Datenquelle."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Knowledge Graphs und GraphRAG",
+      "body_md": "Ein **Knowledge Graph** speichert **Entitäten** (NovaCloud, Pro-Plan, API v3, Leyla Demir) und **Beziehungen** (`Pro-Plan –hat_limit→ 600 req/min`, `Leyla Demir –ist→ CTO`).\n\n**GraphRAG** (u. a. Microsoft, 2024) baut einen solchen Graphen automatisch per LLM aus Dokumenten:\n1. Entitäten und Beziehungen aus jedem Chunk extrahieren.\n2. Den Graphen in **Communities** (thematische Cluster) gruppieren.\n3. Pro Community eine **Zusammenfassung** erzeugen.\n\nAbfrage:\n- **Lokale Suche:** Von Entitäten der Frage ausgehend Nachbarn und zugehörige Textstellen sammeln – gut für Multi-Hop.\n- **Globale Suche:** Community-Zusammenfassungen kombinieren – gut für „Was sind die Hauptthemen …?“\n\n**Kosten:** Die Indexierung ist deutlich teurer als Embedding (LLM-Aufrufe pro Chunk), und Extraktionsfehler fließen in den Graphen ein. Bei jeder Dokumentänderung muss der betroffene Teil neu extrahiert werden.",
+      "key_points": [
+        "Entitäten + Beziehungen.",
+        "Lokale Suche für Multi-Hop, globale für Überblicksfragen.",
+        "Teure, fehleranfällige Indexierung."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Text-to-SQL und strukturierte Daten",
+      "body_md": "Liegen Fakten ohnehin strukturiert vor (Nutzungsdaten, Tickets, Rechnungen), ist **SQL** die richtige Quelle. Ein LLM übersetzt die Frage in eine Abfrage:\n\n```python\nsql = llm(f\"Schema:\\n{schema}\\nFrage: {frage}\\nGib nur eine SELECT-Abfrage zurück.\")\nif not sql.strip().lower().startswith(\"select\"):\n    raise ValueError(\"Nur lesende Abfragen erlaubt\")\nrows = db.execute(sql, timeout=5)        # mit Read-only-Benutzer!\nantwort = llm(f\"Frage: {frage}\\nErgebnis: {rows}\\nAntworte knapp.\")\n```\n\nSicherheits- und Qualitätsregeln:\n- **Read-only-Datenbanknutzer** – die Prüfung auf „SELECT“ allein genügt nicht.\n- **Zeilen-/Mandantenfilter** serverseitig erzwingen (ein Kunde sieht nur eigene Daten).\n- **Schema mit Beschreibungen** und Beispielabfragen mitgeben.\n- **Ergebnis prüfen:** leere Ergebnisse, absurde Werte, Timeouts.\n- Die Abfrage für Nutzer **sichtbar** machen – das ist die „Quelle“ der Antwort.",
+      "key_points": [
+        "SQL für Zahlen, Filter, Aggregation.",
+        "Read-only + Mandantenfilter serverseitig.",
+        "SQL-Abfrage = Zitat der Antwort."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Routing: das richtige Werkzeug pro Frage",
+      "body_md": "Produktive Systeme kombinieren Quellen und **routen** jede Frage:\n\n| Fragetyp | Quelle |\n|---|---|\n| „Was steht in der Richtlinie zu …?“ | Vektor/Hybrid über Dokumente |\n| „Wie viele / Summe / Durchschnitt …?“ | SQL |\n| „Wie hängt X mit Y zusammen?“ | Graph (lokal) |\n| „Was sind die Hauptthemen …?“ | Graph (global) / Zusammenfassungen |\n\nRouting per Regeln (Schlüsselwörter), Klassifikator oder LLM mit Tool-Beschreibungen. Bei Unsicherheit mehrere Quellen abfragen und kombinieren.\n\n**Typischer Fehler:** Alles in den Vektorindex kippen, inklusive CSV-Exporten – und sich wundern, dass „Wie viele Kunden …?“ falsch beantwortet wird.",
+      "key_points": [
+        "Fragetyp → Quelle.",
+        "Routing per Regeln, Klassifikator oder LLM.",
+        "Tabellen nicht als Text-Chunks einbetten, wenn gerechnet werden muss."
+      ],
+      "visual": "agents"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l13t01",
+      "type": "quiz",
+      "title": "Welche Quelle?",
+      "prompt": "Welche Frage sollte **nicht** primär über Vektorsuche beantwortet werden?",
+      "xp": 15,
+      "difficulty": 1,
+      "explanation": "Siehe *Wo Vektorsuche an Grenzen stößt*.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Was steht in der Sicherheits-FAQ zur Schlüsselrotation?"
+        },
+        {
+          "id": "b",
+          "text": "Wie viele Business-Kunden haben im Oktober 2026 mehr als 4 TB belegt?"
+        },
+        {
+          "id": "c",
+          "text": "Wie kündige ich ein Jahresabo?"
+        },
+        {
+          "id": "d",
+          "text": "Welche Ereignisse lösen Webhooks aus?"
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "b"
+        ],
+        "option_explanations": {
+          "a": "Klassische Dokumentfrage.",
+          "b": "Richtig – Filter + Zählung über Nutzungsdaten ⇒ SQL.",
+          "c": "Steht im Hilfe-Center-Artikel.",
+          "d": "Steht im Partner-Handbuch."
+        }
+      }
+    },
+    {
+      "id": "l13t02",
+      "type": "better",
+      "title": "Zählen mit Vektoren?",
+      "prompt": "Was wäre besser?",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Siehe *Text-to-SQL und strukturierte Daten*.",
+      "scenario": "Das Management fragt: *„Wie viele P1-Tickets gab es 2025 pro Monat?“* Die Tickets liegen in einer Datenbank; zusätzlich wurde ein CSV-Export in den Vektorindex geladen.",
+      "variant_a": {
+        "label": "Vektorsuche über den CSV-Export",
+        "description": "top-k = 20 Chunks mit Ticket-Zeilen abrufen und das LLM zählen lassen."
+      },
+      "variant_b": {
+        "label": "Text-to-SQL",
+        "description": "Das LLM erzeugt eine SELECT-Abfrage mit GROUP BY Monat; ein Read-only-Nutzer führt sie aus."
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**B**: Zählen über tausende Datensätze ist eine Aggregation – top-k sieht nur einen Bruchteil, und LLMs zählen über lange Listen unzuverlässig. SQL liefert exakte, reproduzierbare Zahlen, und die Abfrage ist als Beleg zeigbar.\n\n*Trade-off:* Text-to-SQL kann falsche Abfragen erzeugen (falsche Spalte, falscher Filter), die *plausible* Zahlen liefern – das ist tückischer als ein offensichtlicher Fehler. Deshalb Schema-Beschreibungen, Beispielabfragen, Validierung und Anzeige der Abfrage."
+      }
+    },
+    {
+      "id": "l13t03",
+      "type": "better",
+      "title": "Überblicksfrage",
+      "prompt": "Was wäre besser?",
+      "xp": 35,
+      "difficulty": 3,
+      "explanation": "Siehe *Knowledge Graphs und GraphRAG*.",
+      "scenario": "Frage: *„Was sind die wiederkehrenden Ursachen in allen 120 Störungsberichten der letzten drei Jahre?“*",
+      "variant_a": {
+        "label": "Vektorsuche top-10",
+        "description": "Die zehn ähnlichsten Störungsberichte abrufen und zusammenfassen."
+      },
+      "variant_b": {
+        "label": "GraphRAG, globale Suche",
+        "description": "Ursachen als Entitäten extrahiert, Communities gebildet und zusammengefasst; die Antwort kombiniert die Community-Zusammenfassungen."
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**B**: Die Frage ist **global** – die Antwort steckt in keinem einzelnen Bericht, sondern in Mustern über alle. Top-10 sieht nur 8 % der Berichte und überschätzt zufällig ähnliche.\n\n*Trade-off:* GraphRAG-Indexierung ist teuer und muss bei neuen Berichten aktualisiert werden. Für eine einmalige Analyse könnte auch ein Map-Reduce-Ansatz genügen (jeden Bericht einzeln zusammenfassen, dann die Zusammenfassungen verdichten). Für alltägliche Detailfragen („Was war die Ursache am 18.11.2025?“) bleibt Vektorsuche besser und billiger."
+      }
+    },
+    {
+      "id": "l13t04",
+      "type": "order",
+      "title": "Sicheres Text-to-SQL",
+      "prompt": "Sortiere die Schritte einer sicheren Text-to-SQL-Antwort.",
+      "xp": 25,
+      "difficulty": 2,
+      "explanation": "Validierung **vor** Ausführung; die Berechtigungen der Datenbank sind die letzte, wichtigste Verteidigungslinie.",
+      "items": [
+        {
+          "id": "route",
+          "text": "Frage als Aggregations-/Datenfrage erkennen (Routing)"
+        },
+        {
+          "id": "gen",
+          "text": "LLM erzeugt SQL aus Schema-Beschreibung und Frage"
+        },
+        {
+          "id": "val",
+          "text": "Abfrage validieren (nur SELECT, bekannte Tabellen, LIMIT)"
+        },
+        {
+          "id": "exec",
+          "text": "Mit Read-only-Nutzer und Mandantenfilter ausführen"
+        },
+        {
+          "id": "ans",
+          "text": "Antwort aus dem Ergebnis formulieren und die SQL-Abfrage als Beleg anzeigen"
+        }
+      ],
+      "solution": {
+        "order": [
+          "route",
+          "gen",
+          "val",
+          "exec",
+          "ans"
+        ]
+      }
+    },
+    {
+      "id": "l13t05",
+      "type": "code",
+      "title": "Einfacher Router",
+      "prompt": "Vervollständige einen regelbasierten Router: Aggregationsfragen gehen an SQL, alles andere an die Dokumentsuche.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "`any(...)` prüft, ob eines der Schlüsselwörter vorkommt. Regelbasiertes Routing ist schnell und erklärbar, aber grob – „Wie viele Tokens enthält der Pro-Plan?“ würde fälschlich an SQL gehen. Darum ergänzt man oft einen LLM- oder Klassifikator-Router.",
+      "language": "python",
+      "template": "AGG_WORDS = (\"wie viele\", \"anzahl\", \"summe\", \"durchschnitt\", \"pro monat\")\n\ndef route(frage):\n    f = frage.lower()\n    if {{1}}:\n        return \"sql\"\n    return \"vector\"",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Bedingung"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "any(w in f for w in AGG_WORDS)",
+            "any([w in f for w in AGG_WORDS])",
+            "any(word in f for word in AGG_WORDS)"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l13t06",
+      "type": "explain",
+      "title": "Wann Graph, wann SQL, wann Vektor?",
+      "prompt": "Erkläre kurz.",
+      "xp": 40,
+      "difficulty": 2,
+      "explanation": "Siehe *Routing: das richtige Werkzeug pro Frage*.",
+      "question": "Wann würdest du Vektorsuche, SQL bzw. einen Knowledge Graph einsetzen? Nenne je einen typischen Fragetyp.",
+      "solution": {
+        "rubric": [
+          {
+            "concept": "Vektor für inhaltliche Textfragen / Ähnlichkeit",
+            "keywords": [
+              "vektor",
+              "ähnlich",
+              "embedding",
+              "dokument",
+              "textstelle",
+              "semantisch"
+            ]
+          },
+          {
+            "concept": "SQL für Aggregation, Zählen, exakte Filter",
+            "keywords": [
+              "sql",
+              "zähl",
+              "anzahl",
+              "summe",
+              "aggreg",
+              "wie viele",
+              "filter",
+              "durchschnitt"
+            ]
+          },
+          {
+            "concept": "Graph für Beziehungen / Multi-Hop",
+            "keywords": [
+              "graph",
+              "beziehung",
+              "multi-hop",
+              "zusammenhang",
+              "entität",
+              "verbindung",
+              "relation"
+            ]
+          },
+          {
+            "concept": "Globale Überblicksfragen über viele Dokumente",
+            "keywords": [
+              "global",
+              "überblick",
+              "hauptthemen",
+              "community",
+              "muster",
+              "alle dokumente",
+              "zusammenfass"
+            ]
+          }
+        ],
+        "model_answer": "- **Vektorsuche:** Fragen, deren Antwort in einer Textstelle steht – „Was steht in der Richtlinie zur Papierkorb-Frist?“\n- **SQL:** Zahlen, Filter und Aggregation über strukturierte Daten – „Wie viele Business-Kunden nutzen mehr als 4 TB?“\n- **Knowledge Graph (lokal):** Beziehungen und Multi-Hop – „Welche Dokumente verantwortet die CTO?“\n- **GraphRAG (global) / Zusammenfassungen:** Überblicksfragen über viele Dokumente – „Was sind die wiederkehrenden Störungsursachen?“\n\nEin Router entscheidet pro Frage; bei Mischfragen werden Quellen kombiniert.",
+        "pass_ratio": 0.6
+      }
+    },
+    {
+      "id": "l13t07",
+      "type": "boss",
+      "title": "Boss: Die Datenchimäre",
+      "prompt": "Halb Tabelle, halb Text, halb Graph – die Chimäre verwirrt jeden Retriever.",
+      "xp": 100,
+      "difficulty": 3,
+      "explanation": "Die Chimäre ist gezähmt: Jede Frage bekommt die passende Quelle.",
+      "story": "Der NovaCloud-Vertrieb will einen Assistenten, der Dokumente, Nutzungsdaten und Organisationswissen kombiniert. Die Chimäre verlangt, dass du für jede Frage die richtige Waffe wählst.",
+      "lives": 3,
+      "steps": [
+        {
+          "id": "l13t07s1",
+          "type": "quiz",
+          "title": "Multi-Hop",
+          "prompt": "„Welche vertraulichen Dokumente verantwortet die Person, die bei NovaCloud CTO ist?“ – Welche Quelle passt am besten?",
+          "xp": 20,
+          "difficulty": 1,
+          "explanation": "Siehe *Knowledge Graphs und GraphRAG*.",
+          "options": [
+            {
+              "id": "a",
+              "text": "Vektorsuche top-3"
+            },
+            {
+              "id": "b",
+              "text": "SQL mit GROUP BY"
+            },
+            {
+              "id": "c",
+              "text": "Knowledge Graph (lokale Suche ab Entität ‚CTO‘) – mit ACL-Prüfung"
+            },
+            {
+              "id": "d",
+              "text": "Websuche"
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "c"
+            ],
+            "option_explanations": {
+              "a": "Zwei Sprünge (Rolle → Person → Dokumente) – top-3 trifft das selten zuverlässig.",
+              "b": "Keine Aggregation.",
+              "c": "Richtig – und vertrauliche Dokumente dürfen nur Berechtigte sehen.",
+              "d": "Interne Information."
+            }
+          }
+        },
+        {
+          "id": "l13t07s2",
+          "type": "code",
+          "title": "SQL-Wächter",
+          "prompt": "Lass nur Abfragen durch, die mit SELECT beginnen (Groß-/Kleinschreibung egal, führende Leerzeichen ignorieren).",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Achtung: Das ist nur ein Vorfilter (`SELECT …; DROP TABLE …` beginnt auch mit SELECT). Die eigentliche Sicherheit liefert ein Read-only-Datenbanknutzer.",
+          "language": "python",
+          "template": "def is_safe_select(sql):\n    return {{1}}",
+          "blanks": [
+            {
+              "id": "1",
+              "placeholder": "Prüfung"
+            }
+          ],
+          "solution": {
+            "blanks": {
+              "1": [
+                "sql.strip().lower().startswith(\"select\")",
+                "sql.strip().lower().startswith('select')",
+                "sql.lstrip().lower().startswith('select')",
+                "sql.lstrip().lower().startswith(\"select\")",
+                "sql.strip().upper().startswith('SELECT')",
+                "sql.strip().upper().startswith(\"SELECT\")"
+              ]
+            }
+          }
+        },
+        {
+          "id": "l13t07s3",
+          "type": "better",
+          "title": "Tabellen einbetten?",
+          "prompt": "Was wäre besser?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Siehe *Routing*.",
+          "scenario": "Ein Kollege will die Nutzungsdaten-Tabelle (2 Mio. Zeilen) als Text-Chunks in den Vektorindex laden, „damit alles an einem Ort ist“.",
+          "variant_a": {
+            "label": "Alles in den Vektorindex",
+            "description": "Jede Zeile als Text-Chunk einbetten."
+          },
+          "variant_b": {
+            "label": "Getrennte Quellen + Router",
+            "description": "Tabelle bleibt in der Datenbank (Text-to-SQL), Dokumente im Vektorindex; ein Router wählt."
+          },
+          "solution": {
+            "correct": "b",
+            "why": "**B**: Vektorsuche kann über 2 Mio. Zeilen weder zählen noch filtern; der Index wird riesig und verrauscht andere Treffer. *Trade-off:* Zwei Systeme bedeuten mehr Betriebsaufwand und eine Routing-Fehlerquelle. Sinnvoll eingebettet werden können dagegen **Beschreibungen** der Tabellen (Schema-Doku), damit der Router und das Text-to-SQL-Modell sie finden."
+          }
+        }
+      ]
+    }
+  ]
+}

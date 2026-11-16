@@ -1,0 +1,1 @@
+"""RAG Academy – Backend-Paket."""

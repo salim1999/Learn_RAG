@@ -1,0 +1,616 @@
+{
+  "id": 9,
+  "title": "Veraltete Informationen",
+  "subtitle": "Zeitstempel, Versionen und Konflikte meistern",
+  "icon": "⏳",
+  "color": "#f5b942",
+  "theory": [
+    {
+      "heading": "Zeitstempel und Gültigkeit",
+      "body_md": "Ein Wissensbestand ist eine **Zeitreihe**, kein Schnappschuss. NovaCloud hat vier Preisblätter, drei Rate-Limit-Versionen und zwei Datenschutzrichtlinien – alle stehen gleichzeitig im Index.\n\nWichtige Zeit-Metadaten:\n- **Veröffentlichungsdatum** (`date`): Wann wurde das Dokument erstellt?\n- **Gültig ab / gültig bis** (`valid_from`, `valid_to`): Ab wann gilt der Inhalt? Ein am 15.02. veröffentlichtes Preisblatt kann ab 01.03. gelten.\n- **Abrufdatum / Index-Datum:** Wann wurde das Dokument zuletzt eingelesen?\n- **Bezugsdatum der Frage** (`as_of`): Meist „heute“ – aber bei „Was kostete der Pro-Plan im Mai 2024?“ ist es ein historisches Datum!\n\n> **Merksatz:** „Aktuell“ heißt „gültig zum gefragten Zeitpunkt“, nicht „zuletzt veröffentlicht“.",
+      "key_points": [
+        "Wissen ist eine Zeitreihe.",
+        "Veröffentlichung ≠ Gültigkeit.",
+        "Das Bezugsdatum hängt von der Frage ab."
+      ],
+      "visual": "timeline"
+    },
+    {
+      "heading": "Versionierung und superseded_by",
+      "body_md": "Die zuverlässigste Freshness-Information ist **explizit**: Ein Dokument verweist auf seinen Nachfolger (`superseded_by`). Damit sind veraltete Versionen eindeutig erkennbar – ganz ohne Heuristik.\n\nStrategien im Retrieval:\n- **Harter Filter (`drop_superseded`):** Ersetzte Dokumente werden aus den Treffern entfernt. Ideal für „Wie ist es jetzt?“-Fragen.\n- **Markieren statt löschen:** Ersetzte Dokumente bleiben, werden im Kontext aber als `[ERSETZT durch d04]` gekennzeichnet. Nötig für historische Fragen und für Antworten wie „Früher 14,90 €, seit März 2026 16,90 €“.\n- **Versionsketten:** d01 → d02 → d03 → d04. Bei einem Treffer auf d02 kann man gezielt das Kettenende d04 nachladen.\n\n```python\ndef latest(doc_id, docs):\n    while docs[doc_id][\"superseded_by\"]:\n        doc_id = docs[doc_id][\"superseded_by\"]\n    return doc_id\n```\n\n**Typischer Fehler:** Alte Versionen physisch löschen – dann sind historische Fragen und Audits unmöglich.",
+      "key_points": [
+        "superseded_by ist das stärkste Freshness-Signal.",
+        "Filtern für Jetzt-Fragen, markieren für historische.",
+        "Versionsketten bis zum Ende verfolgen."
+      ],
+      "visual": "timeline"
+    },
+    {
+      "heading": "Recency-Decay",
+      "body_md": "Nicht jedes Dokument hat einen expliziten Nachfolger. Dann hilft ein **zeitlicher Abschlag** auf den Relevanz-Score:\n\n```python\ndef recency_weight(age_days, half_life_days=365):\n    return 0.5 ** (age_days / half_life_days)\n\nfinal_score = relevance * recency_weight(age_days, half_life_days=180)\n```\n\nNach einer Halbwertszeit zählt ein Dokument halb so viel, nach zwei nur noch ein Viertel.\n\n- **Kurze Halbwertszeit** (30–90 Tage): News, Status, Preise – neue Infos dominieren stark.\n- **Lange Halbwertszeit** (2–5 Jahre): Konzepte, Architektur, Grundlagen.\n- **Kein Decay:** Gesetzestexte, Verträge – hier zählt Gültigkeit, nicht Alter.\n\n**Fallstrick:** Decay bestraft auch zeitlose, aber alte Dokumente (z. B. die Kündigungsregeln von 2024, die weiterhin gelten). Deshalb Halbwertszeit pro Dokumenttyp wählen und explizite Versionierung bevorzugen.",
+      "key_points": [
+        "Gewicht = 0,5 ** (Alter / Halbwertszeit).",
+        "Halbwertszeit pro Dokumenttyp wählen.",
+        "Decay ist Heuristik – Versionierung ist besser."
+      ],
+      "visual": "timeline"
+    },
+    {
+      "heading": "Konfliktauflösung: Aktualität vs. Autorität",
+      "body_md": "Widersprüche entstehen nicht nur durch Versionen, sondern auch durch **Quellen unterschiedlicher Verlässlichkeit**. Der Community-Forum-Beitrag vom Februar 2026 („Pro-Plan nur 7,99 €“, „Daten in den USA“) ist *neuer* als das Preisblatt 2024 – aber nicht verlässlicher.\n\nEine robuste Rangfolge:\n1. **Gültigkeit:** Ersetzte Versionen verlieren gegen ihren Nachfolger.\n2. **Autorität:** Offizielle Quellen (Preisblatt, Richtlinie, Vertrag) schlagen inoffizielle (Forum, Blog, Mail-Weiterleitung).\n3. **Aktualität:** Bei gleicher Autorität gewinnt das neuere Dokument.\n4. **Transparenz:** Bleibt ein Konflikt bestehen, wird er in der Antwort **benannt**, statt still eine Seite zu wählen.\n\n```python\nAUTHORITY = {\"Preisblatt\": 3, \"Vertragsunterlagen\": 3, \"Rechtsabteilung\": 3, \"Hilfe-Center\": 2, \"Community-Forum\": 0}\n```",
+      "key_points": [
+        "Erst Gültigkeit, dann Autorität, dann Aktualität.",
+        "Neu ≠ verlässlich.",
+        "Verbleibende Konflikte offenlegen."
+      ],
+      "visual": "timeline"
+    },
+    {
+      "heading": "Inkrementelles Re-Indexing und TTL",
+      "body_md": "Ein Index veraltet, wenn sich die Quellen ändern, der Index aber nicht.\n\n- **Inkrementelles Re-Indexing:** Nur geänderte Dokumente neu verarbeiten. Erkennen über Änderungsdatum oder **Content-Hash** pro Dokument/Chunk. Gelöschte Quellen auch aus dem Index löschen (Tombstones)!\n- **Change Data Capture / Webhooks:** Quellsysteme melden Änderungen aktiv, statt dass man periodisch alles scannt.\n- **TTL (Time to Live):** Jeder Eintrag – im Index oder im Antwort-Cache – bekommt ein Ablaufdatum. Danach wird neu geladen oder neu geprüft. Kurze TTL für volatile Daten (Status, Preise), lange für stabile.\n- **Cache-Invalidierung:** Ändert sich ein Quelldokument, müssen auch gecachte Antworten, die darauf basieren, verworfen werden (Level 14).\n\n```python\nimport hashlib\ndef needs_reindex(doc, stored_hashes):\n    h = hashlib.sha256(doc[\"text\"].encode()).hexdigest()\n    return stored_hashes.get(doc[\"id\"]) != h\n```",
+      "key_points": [
+        "Content-Hash erkennt Änderungen.",
+        "Löschungen propagieren!",
+        "TTL für Index-Einträge und Caches."
+      ],
+      "visual": "pipeline"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l09t01",
+      "type": "freshness",
+      "title": "Was kostet Pro heute?",
+      "prompt": "Heute ist der **16.11.2026**. Welche Antwort ist korrekt?",
+      "xp": 25,
+      "difficulty": 2,
+      "explanation": "Gültigkeit vor Autorität vor Aktualität. Siehe *Konfliktauflösung*.",
+      "visual": "timeline",
+      "question": "Wie viel kostet der Pro-Plan pro Monat?",
+      "documents": [
+        {
+          "id": "d02",
+          "title": "NovaCloud Preisblatt 2023",
+          "date": "2023-04-01",
+          "version": "2.0",
+          "text": "Ab dem 1. April 2023 gelten bei NovaCloud folgende Preise. Dieses Preisblatt ersetzt das Preisblatt 2022.\n\nStarter bleibt kostenlos, der enthaltene Speicher steigt auf 20 GB. Der Pro-Plan kostet jetzt 12,90 € pro Monat und enthält 1 TB Speicher sowie Dateiversionierung für 60 Tage. Der Business-Plan kostet 26,00 € pro Nutzer und Monat (ab drei Nutzern) und enthält 2 TB Speicher pro Nutzer sowie SSO-Anmeldung.\n\nBei jährlicher Zahlung beträgt der Rabatt nun 15 %. Speicher-Zusatzpakete kosten 2,50 € pro 100 GB und Monat. Bestandskunden behalten ihren bisherigen Preis bis zum Ende ihrer aktuellen Vertragslaufzeit.",
+          "source": "Preisblatt v2.0"
+        },
+        {
+          "id": "d03",
+          "title": "NovaCloud Preisblatt 2024",
+          "date": "2024-06-01",
+          "version": "3.0",
+          "text": "Preisblatt gültig ab 1. Juni 2024. Es ersetzt das Preisblatt vom April 2023.\n\nStarter: kostenlos, 20 GB Speicher, keine API-Nutzung. Pro-Plan: 14,90 € pro Monat, 2 TB Speicher, Dateiversionierung für 90 Tage und Zugang zur NovaMind-API mit 50.000 Tokens pro Monat inklusive. Business-Plan: 27,00 € pro Nutzer und Monat (ab drei Nutzern), 3 TB Speicher pro Nutzer, SSO und Audit-Log.\n\nErstmals bietet NovaCloud den Enterprise-Plan an; der Preis wird individuell vereinbart. Der Rabatt bei jährlicher Zahlung beträgt 20 %. Zusätzliche NovaMind-Tokens kosten 0,40 € pro 1.000 Tokens.",
+          "source": "Preisblatt v3.0"
+        },
+        {
+          "id": "d04",
+          "title": "NovaCloud Preisblatt 2026",
+          "date": "2026-03-01",
+          "version": "4.0",
+          "text": "Aktuelles Preisblatt, gültig ab 1. März 2026. Es ersetzt alle früheren Preisblätter.\n\nStarter: kostenlos, 25 GB Speicher. Der Pro-Plan kostet 16,90 € pro Monat und enthält 2 TB Speicher, Dateiversionierung für 180 Tage und 200.000 NovaMind-Tokens pro Monat inklusive. Business-Plan: 29,00 € pro Nutzer und Monat (ab drei Nutzern), 5 TB Speicher pro Nutzer, SSO, Audit-Log und 24/7-Notfall-Hotline. Enterprise-Plan: Preis auf Anfrage, mit dediziertem Ansprechpartner und individuellem SLA.\n\nDer Rabatt bei jährlicher Zahlung bleibt bei 20 %. Zusätzliche NovaMind-Tokens kosten jetzt 0,25 € pro 1.000 Tokens. Speicher-Zusatzpakete kosten 3,00 € pro 500 GB und Monat. Alle Preise zuzüglich Mehrwertsteuer.",
+          "source": "Preisblatt v4.0"
+        },
+        {
+          "id": "d19",
+          "title": "Insider-Tipps: NovaCloud günstiger nutzen",
+          "date": "2026-02-14",
+          "version": "1.0",
+          "text": "Beitrag von Nutzer „cloudfuchs88“: Leute, ich hab’s aus sicherer Quelle! Das Pro-Abo gibt’s eigentlich schon für 7,99 €, wenn man über den richtigen Link bucht. Außerdem gibt es im Pro-Plan unbegrenzte API-Anfragen, die Rate-Limits gelten nur auf dem Papier.\n\nWas viele nicht wissen: NovaCloud speichert die Daten in Wirklichkeit in den USA, deshalb ist es so günstig. Und gelöschte Dateien kann man noch ein ganzes Jahr lang wiederherstellen.\n\nHinweis der Moderation: Dieser Beitrag gibt die persönliche Meinung eines Nutzers wieder und wurde nicht von NovaCloud geprüft.",
+          "source": "Community-Forum"
+        }
+      ],
+      "options": [
+        {
+          "id": "a",
+          "text": "12,90 €"
+        },
+        {
+          "id": "b",
+          "text": "14,90 €"
+        },
+        {
+          "id": "c",
+          "text": "16,90 €"
+        },
+        {
+          "id": "d",
+          "text": "7,99 €"
+        }
+      ],
+      "solution": {
+        "correct": "c",
+        "why": "**16,90 €** laut Preisblatt 2026 (v4.0, gültig ab 01.03.2026, kein Nachfolger). 12,90 € und 14,90 € stammen aus ersetzten Preisblättern (`superseded_by`). Die 7,99 € kommen aus einem inoffiziellen Forenbeitrag – neuer als 2024, aber ohne Autorität und ausdrücklich ungeprüft."
+      }
+    },
+    {
+      "id": "l09t02",
+      "type": "freshness",
+      "title": "Papierkorb-Frist",
+      "prompt": "Heute ist der **16.11.2026**. Wie lange bleiben gelöschte Dateien im Papierkorb?",
+      "xp": 25,
+      "difficulty": 2,
+      "explanation": "Siehe *Versionierung und superseded_by*.",
+      "visual": "timeline",
+      "question": "Wie lange bleiben gelöschte Dateien im Papierkorb?",
+      "documents": [
+        {
+          "id": "d08",
+          "title": "Datenaufbewahrungsrichtlinie 2022",
+          "date": "2022-03-01",
+          "version": "1.0",
+          "text": "Diese Richtlinie beschreibt, wie lange NovaCloud Daten aufbewahrt.\n\nGelöschte Dateien verbleiben 90 Tage im Papierkorb und werden danach endgültig gelöscht. Zugriffs- und Server-Logs werden 12 Monate gespeichert. Nach einer Kündigung werden alle Kontodaten nach 60 Tagen gelöscht.\n\nKundendaten werden in Rechenzentren in Frankfurt am Main und Dublin gespeichert. Ein Vertrag zur Auftragsverarbeitung (AVV) nach Art. 28 DSGVO kann per E-Mail angefordert werden.\n\nBackups von gelöschten Konten werden spätestens nach weiteren 30 Tagen überschrieben. Rechnungsdaten werden aufgrund handelsrechtlicher Pflichten zehn Jahre aufbewahrt. Fragen zum Datenschutz beantwortet das Datenschutz-Team per E-Mail.",
+          "source": "Rechtsabteilung"
+        },
+        {
+          "id": "d09",
+          "title": "Datenaufbewahrung & DSGVO-Richtlinie 2025",
+          "date": "2025-02-01",
+          "version": "2.0",
+          "text": "Neufassung der Datenaufbewahrungsrichtlinie, gültig ab 1. Februar 2025. Sie ersetzt die Fassung von 2022.\n\nGelöschte Dateien verbleiben nur noch 30 Tage im Papierkorb und werden danach endgültig gelöscht. Zugriffs- und Server-Logs werden 6 Monate gespeichert. Nach einer Kündigung werden alle Kontodaten nach 30 Tagen gelöscht.\n\nKundendaten werden ausschließlich in Rechenzentren in Frankfurt am Main und Nürnberg gespeichert; der Standort Dublin wurde zum 31. Dezember 2024 aufgegeben. Der Vertrag zur Auftragsverarbeitung (AVV) ist im Admin-Bereich unter Einstellungen > Recht digital abschließbar. Datenschutzbeauftragte von NovaCloud ist Dr. Miriam Kessler, erreichbar unter datenschutz@novacloud.example. Auskunftsanfragen nach Art. 15 DSGVO werden innerhalb von 30 Tagen beantwortet.",
+          "source": "Rechtsabteilung"
+        },
+        {
+          "id": "d19",
+          "title": "Insider-Tipps: NovaCloud günstiger nutzen",
+          "date": "2026-02-14",
+          "version": "1.0",
+          "text": "Beitrag von Nutzer „cloudfuchs88“: Leute, ich hab’s aus sicherer Quelle! Das Pro-Abo gibt’s eigentlich schon für 7,99 €, wenn man über den richtigen Link bucht. Außerdem gibt es im Pro-Plan unbegrenzte API-Anfragen, die Rate-Limits gelten nur auf dem Papier.\n\nWas viele nicht wissen: NovaCloud speichert die Daten in Wirklichkeit in den USA, deshalb ist es so günstig. Und gelöschte Dateien kann man noch ein ganzes Jahr lang wiederherstellen.\n\nHinweis der Moderation: Dieser Beitrag gibt die persönliche Meinung eines Nutzers wieder und wurde nicht von NovaCloud geprüft.",
+          "source": "Community-Forum"
+        }
+      ],
+      "options": [
+        {
+          "id": "a",
+          "text": "90 Tage"
+        },
+        {
+          "id": "b",
+          "text": "30 Tage"
+        },
+        {
+          "id": "c",
+          "text": "Ein Jahr"
+        },
+        {
+          "id": "d",
+          "text": "Die Quellen widersprechen sich – keine Aussage möglich."
+        }
+      ],
+      "solution": {
+        "correct": "b",
+        "why": "**30 Tage** laut Richtlinie 2025, die die Fassung von 2022 (90 Tage) ausdrücklich ersetzt. „Ein Jahr“ stammt aus dem Forum. Ein Widerspruch besteht nur scheinbar: Die Versionierung löst ihn eindeutig auf – Abstain wäre hier übervorsichtig."
+      }
+    },
+    {
+      "id": "l09t03",
+      "type": "freshness",
+      "title": "Eine historische Frage",
+      "prompt": "Achtung, Falle: Die Frage bezieht sich auf die **Vergangenheit**.",
+      "xp": 35,
+      "difficulty": 3,
+      "explanation": "Siehe *Zeitstempel und Gültigkeit*: Das Bezugsdatum hängt von der Frage ab.",
+      "visual": "timeline",
+      "question": "Was kostete der Pro-Plan im Mai 2024?",
+      "documents": [
+        {
+          "id": "d02",
+          "title": "NovaCloud Preisblatt 2023",
+          "date": "2023-04-01",
+          "version": "2.0",
+          "text": "Ab dem 1. April 2023 gelten bei NovaCloud folgende Preise. Dieses Preisblatt ersetzt das Preisblatt 2022.\n\nStarter bleibt kostenlos, der enthaltene Speicher steigt auf 20 GB. Der Pro-Plan kostet jetzt 12,90 € pro Monat und enthält 1 TB Speicher sowie Dateiversionierung für 60 Tage. Der Business-Plan kostet 26,00 € pro Nutzer und Monat (ab drei Nutzern) und enthält 2 TB Speicher pro Nutzer sowie SSO-Anmeldung.\n\nBei jährlicher Zahlung beträgt der Rabatt nun 15 %. Speicher-Zusatzpakete kosten 2,50 € pro 100 GB und Monat. Bestandskunden behalten ihren bisherigen Preis bis zum Ende ihrer aktuellen Vertragslaufzeit.",
+          "source": "Preisblatt v2.0"
+        },
+        {
+          "id": "d03",
+          "title": "NovaCloud Preisblatt 2024",
+          "date": "2024-06-01",
+          "version": "3.0",
+          "text": "Preisblatt gültig ab 1. Juni 2024. Es ersetzt das Preisblatt vom April 2023.\n\nStarter: kostenlos, 20 GB Speicher, keine API-Nutzung. Pro-Plan: 14,90 € pro Monat, 2 TB Speicher, Dateiversionierung für 90 Tage und Zugang zur NovaMind-API mit 50.000 Tokens pro Monat inklusive. Business-Plan: 27,00 € pro Nutzer und Monat (ab drei Nutzern), 3 TB Speicher pro Nutzer, SSO und Audit-Log.\n\nErstmals bietet NovaCloud den Enterprise-Plan an; der Preis wird individuell vereinbart. Der Rabatt bei jährlicher Zahlung beträgt 20 %. Zusätzliche NovaMind-Tokens kosten 0,40 € pro 1.000 Tokens.",
+          "source": "Preisblatt v3.0"
+        },
+        {
+          "id": "d04",
+          "title": "NovaCloud Preisblatt 2026",
+          "date": "2026-03-01",
+          "version": "4.0",
+          "text": "Aktuelles Preisblatt, gültig ab 1. März 2026. Es ersetzt alle früheren Preisblätter.\n\nStarter: kostenlos, 25 GB Speicher. Der Pro-Plan kostet 16,90 € pro Monat und enthält 2 TB Speicher, Dateiversionierung für 180 Tage und 200.000 NovaMind-Tokens pro Monat inklusive. Business-Plan: 29,00 € pro Nutzer und Monat (ab drei Nutzern), 5 TB Speicher pro Nutzer, SSO, Audit-Log und 24/7-Notfall-Hotline. Enterprise-Plan: Preis auf Anfrage, mit dediziertem Ansprechpartner und individuellem SLA.\n\nDer Rabatt bei jährlicher Zahlung bleibt bei 20 %. Zusätzliche NovaMind-Tokens kosten jetzt 0,25 € pro 1.000 Tokens. Speicher-Zusatzpakete kosten 3,00 € pro 500 GB und Monat. Alle Preise zuzüglich Mehrwertsteuer.",
+          "source": "Preisblatt v4.0"
+        }
+      ],
+      "options": [
+        {
+          "id": "a",
+          "text": "12,90 €"
+        },
+        {
+          "id": "b",
+          "text": "14,90 €"
+        },
+        {
+          "id": "c",
+          "text": "16,90 €"
+        },
+        {
+          "id": "d",
+          "text": "Unbekannt, da alle Preisblätter außer dem neuesten veraltet sind."
+        }
+      ],
+      "solution": {
+        "correct": "a",
+        "why": "**12,90 €**: Im Mai 2024 galt das Preisblatt 2023 (gültig ab 01.04.2023). Das Preisblatt 2024 gilt erst ab **1. Juni 2024**. Hier wäre `drop_superseded` sogar schädlich – die gesuchte Information steht in einem ersetzten Dokument. Freshness heißt: gültig **zum Bezugsdatum der Frage**."
+      }
+    },
+    {
+      "id": "l09t04",
+      "type": "code",
+      "title": "Recency-Decay",
+      "prompt": "Implementiere den exponentiellen Zeitabschlag und wende ihn auf den Relevanz-Score an.",
+      "xp": 35,
+      "difficulty": 2,
+      "explanation": "Nach genau einer Halbwertszeit ist das Gewicht 0,5. Multiplikativ kombiniert, bleibt die Rangfolge innerhalb gleich alter Dokumente erhalten.",
+      "language": "python",
+      "template": "def recency_weight(age_days, half_life_days=365):\n    return {{1}}\n\ndef final_score(relevance, age_days, half_life_days=365):\n    return {{2}}",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Halbwertszeit-Formel"
+        },
+        {
+          "id": "2",
+          "placeholder": "Kombination"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "0.5 ** (age_days / half_life_days)",
+            "0.5**(age_days/half_life_days)",
+            "2 ** (-age_days / half_life_days)",
+            "pow(0.5, age_days / half_life_days)",
+            "math.pow(0.5, age_days / half_life_days)",
+            "(1/2) ** (age_days / half_life_days)"
+          ],
+          "2": [
+            "relevance * recency_weight(age_days, half_life_days)",
+            "relevance*recency_weight(age_days, half_life_days)",
+            "recency_weight(age_days, half_life_days) * relevance",
+            "relevance * recency_weight(age_days, half_life_days=half_life_days)"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l09t05",
+      "type": "tune",
+      "title": "Halbwertszeit einstellen",
+      "prompt": "Frage: **„Wie viel kostet der Pro-Plan pro Monat?“** Freshness ist aktiviert, aber die Halbwertszeit ist mit 1.000 Tagen so lang, dass alte Preisblätter im Kontext landen. Stelle Halbwertszeit und *k* so ein, dass **kein** veraltetes Dokument mehr im Kontext ist (ohne `drop_superseded`).",
+      "xp": 45,
+      "difficulty": 2,
+      "explanation": "Mit kurzer Halbwertszeit (z. B. 60 Tage) bekommt das Preisblatt 2024 (≈ 900 Tage alt) ein Gewicht von ≈ 0,5^15 – praktisch null. Ein kleineres *k* verhindert zusätzlich, dass Lückenfüller nachrutschen. Beachte: Das ist eine Heuristik; `drop_superseded` löst dasselbe Problem exakt – und kurze Halbwertszeiten würden zeitlose ältere Dokumente unnötig bestrafen.",
+      "hint": "Je kürzer die Halbwertszeit, desto stärker dominieren neue Dokumente.",
+      "visual": "timeline",
+      "query": "Wie viel kostet der Pro-Plan pro Monat?",
+      "params": [
+        {
+          "name": "freshness.half_life_days",
+          "label": "Halbwertszeit (Tage)",
+          "min": 15,
+          "max": 1000,
+          "step": 15,
+          "default": 1000
+        },
+        {
+          "name": "retrieval.k",
+          "label": "Anzahl Treffer k",
+          "min": 1,
+          "max": 8,
+          "step": 1,
+          "default": 4
+        }
+      ],
+      "target": {
+        "metric": "freshness_score",
+        "threshold": 0.99,
+        "label": "Freshness-Score ≥ 99 %"
+      },
+      "base_config": {
+        "query": "Wie viel kostet der Pro-Plan pro Monat?",
+        "corpus": "default",
+        "chunking": {
+          "strategy": "recursive",
+          "size": 300,
+          "overlap": 50
+        },
+        "retrieval": {
+          "method": "bm25",
+          "k": 4,
+          "mmr": false,
+          "mmr_lambda": 0.7,
+          "rerank": false
+        },
+        "freshness": {
+          "enabled": true,
+          "half_life_days": 1000,
+          "drop_superseded": false,
+          "as_of": "2026-11-16"
+        },
+        "generation": {
+          "mode": "extractive",
+          "strict_grounding": true,
+          "abstain_threshold": 0.2,
+          "require_citations": true
+        },
+        "verify": true
+      },
+      "solution": {
+        "relevant_doc_ids": [
+          "d04"
+        ],
+        "example_params": {
+          "freshness.half_life_days": 60,
+          "retrieval.k": 2
+        }
+      }
+    },
+    {
+      "id": "l09t06",
+      "type": "better",
+      "title": "Freshness an oder aus?",
+      "prompt": "Was wäre besser?",
+      "xp": 35,
+      "difficulty": 2,
+      "explanation": "Siehe *Versionierung und superseded_by*.",
+      "visual": "timeline",
+      "scenario": "Ein Kunde fragt: *„Wie viel kostet der Pro-Plan pro Monat?“* Teste beide Konfigurationen.",
+      "variant_a": {
+        "label": "Freshness + drop_superseded",
+        "description": "Zeitabschlag aktiv (Halbwertszeit 365 Tage), ersetzte Versionen werden entfernt."
+      },
+      "variant_b": {
+        "label": "Reine Relevanz",
+        "description": "Kein Zeitabschlag, alle Versionen bleiben im Kontext."
+      },
+      "run": {
+        "query": "Wie viel kostet der Pro-Plan pro Monat?",
+        "config_a": {
+          "query": "Wie viel kostet der Pro-Plan pro Monat?",
+          "corpus": "default",
+          "chunking": {
+            "strategy": "recursive",
+            "size": 300,
+            "overlap": 50
+          },
+          "retrieval": {
+            "method": "bm25",
+            "k": 4,
+            "mmr": false,
+            "mmr_lambda": 0.7,
+            "rerank": false
+          },
+          "freshness": {
+            "enabled": true,
+            "half_life_days": 365,
+            "drop_superseded": true,
+            "as_of": "2026-11-16"
+          },
+          "generation": {
+            "mode": "extractive",
+            "strict_grounding": true,
+            "abstain_threshold": 0.2,
+            "require_citations": true
+          },
+          "verify": true
+        },
+        "config_b": {
+          "query": "Wie viel kostet der Pro-Plan pro Monat?",
+          "corpus": "default",
+          "chunking": {
+            "strategy": "recursive",
+            "size": 300,
+            "overlap": 50
+          },
+          "retrieval": {
+            "method": "bm25",
+            "k": 4,
+            "mmr": false,
+            "mmr_lambda": 0.7,
+            "rerank": false
+          },
+          "freshness": {
+            "enabled": false,
+            "half_life_days": 365,
+            "drop_superseded": false,
+            "as_of": "2026-11-16"
+          },
+          "generation": {
+            "mode": "extractive",
+            "strict_grounding": true,
+            "abstain_threshold": 0.2,
+            "require_citations": true
+          },
+          "verify": true
+        }
+      },
+      "solution": {
+        "correct": "a",
+        "why": "**A** liefert nur das gültige Preisblatt 2026 (16,90 €). In B stehen 9,90 €, 12,90 €, 14,90 € und 16,90 € gleichzeitig im Kontext – die extraktive Antwort greift womöglich einen veralteten Preis, und ein LLM muss raten oder alles aufzählen. Der Freshness-Score von B ist entsprechend niedrig.\n\n*Trade-off:* Für historische Fragen („Was kostete Pro 2023?“) oder Preisvergleiche wäre A falsch – dort braucht man die ersetzten Versionen, idealerweise markiert. Ein gutes System erkennt das Bezugsdatum der Frage und schaltet den Filter entsprechend."
+      }
+    },
+    {
+      "id": "l09t07",
+      "type": "boss",
+      "title": "Boss: Der Zeitreisende",
+      "prompt": "Der Zeitreisende mischt Vergangenheit und Gegenwart. Halte die Zeitlinie sauber!",
+      "xp": 120,
+      "difficulty": 3,
+      "explanation": "Die Zeitlinie ist repariert: Gültigkeit, Autorität, Aktualität – in dieser Reihenfolge.",
+      "visual": "timeline",
+      "story": "Heute ist der 16. November 2026. Ein Entwickler-Team will wissen, ob seine Integration noch läuft und welche Garantien gelten. Im Index liegt alles von 2022 bis 2026 – und der Zeitreisende flüstert dir alte Wahrheiten ein.",
+      "lives": 3,
+      "steps": [
+        {
+          "id": "l09t07s1",
+          "type": "freshness",
+          "title": "API v1",
+          "prompt": "Prüfe die Dokumente zum Stichtag 16.11.2026.",
+          "xp": 25,
+          "difficulty": 2,
+          "explanation": "Eine Ankündigung in der Vergangenheit („wird abgeschaltet am …“) muss relativ zum heutigen Datum gelesen werden.",
+          "visual": "timeline",
+          "question": "Kann unsere Integration heute noch API v1 mit 60 Anfragen pro Minute nutzen?",
+          "documents": [
+            {
+              "id": "d05",
+              "title": "API-Rate-Limits v1",
+              "date": "2022-05-10",
+              "version": "1.0",
+              "text": "Die NovaCloud-API in Version 1 begrenzt Anfragen pro API-Schlüssel. Für alle Pläne gilt ein Limit von 60 Anfragen pro Minute und 10.000 Anfragen pro Tag.\n\nWird das Limit überschritten, antwortet die API mit dem HTTP-Statuscode 429 (Too Many Requests). Der Zähler wird jeweils zur vollen Minute zurückgesetzt. Uploads größer als 100 MB zählen als fünf Anfragen. Höhere Limits können über den Vertrieb angefragt werden.\n\nDie API-Version 1 unterstützt ausschließlich API-Schlüssel zur Authentifizierung. Antworten werden im JSON-Format geliefert, Zeitangaben im Format ISO 8601. Eine Sandbox-Umgebung gibt es in dieser Version noch nicht.",
+              "source": "Entwicklerportal"
+            },
+            {
+              "id": "d24",
+              "title": "API-Versionierung & Deprecation-Policy",
+              "date": "2025-01-20",
+              "version": "1.0",
+              "text": "NovaCloud unterstützt jede API-Version mindestens 12 Monate, nachdem ihre Nachfolgeversion veröffentlicht wurde.\n\nZeitplan: API v1 ist seit dem 31. Januar 2025 als veraltet (deprecated) markiert und wird am 31. Januar 2026 abgeschaltet. API v2 wird am 31. Dezember 2026 abgeschaltet. API v3 ist die aktuelle Version.\n\nVeraltete Endpunkte liefern den Header Deprecation sowie den Header Sunset mit dem Abschaltdatum. Änderungen werden mindestens 90 Tage vorher per E-Mail an alle Inhaber von API-Schlüsseln angekündigt.\n\nNeue optionale Felder in Antworten gelten nicht als inkompatible Änderung und können jederzeit ohne Vorankündigung hinzukommen.",
+              "source": "Entwicklerportal"
+            },
+            {
+              "id": "d18",
+              "title": "Release Notes 4.0",
+              "date": "2026-09-29",
+              "version": "4.0",
+              "text": "Version 4.0 ist ab dem 29. September 2026 verfügbar.\n\nDas neue Modell nova-3 bietet ein Kontextfenster von 256.000 Tokens und ist das neue Standardmodell. nova-1 wurde wie angekündigt am 30. Juni 2026 abgeschaltet. Der Embeddings-Endpunkt liefert nun standardmäßig 1.536 Dimensionen; bestehende Indizes mit 1.024 Dimensionen müssen neu berechnet werden, wenn das neue Modell genutzt werden soll.\n\nDie API-Version 1 wurde am 31. Januar 2026 endgültig abgeschaltet. Neu ist außerdem eine Hybrid-Suche, die Stichwort- und Vektorsuche kombiniert.\n\nFür die Migration stellt NovaCloud ein Skript bereit, das bestehende Indizes im Hintergrund neu berechnet.",
+              "source": "Release Notes"
+            }
+          ],
+          "options": [
+            {
+              "id": "a",
+              "text": "Ja, mit 60 Anfragen pro Minute und 10.000 pro Tag."
+            },
+            {
+              "id": "b",
+              "text": "Nein, API v1 wurde am 31.01.2026 abgeschaltet."
+            },
+            {
+              "id": "c",
+              "text": "Ja, bis zum 31.12.2026."
+            },
+            {
+              "id": "d",
+              "text": "Die Dokumente geben keine Auskunft."
+            }
+          ],
+          "solution": {
+            "correct": "b",
+            "why": "Die Deprecation-Policy (Januar 2025) kündigt die Abschaltung für den 31.01.2026 an; die Release Notes 4.0 (September 2026) bestätigen sie. Die Rate-Limits v1 sind zwar nicht als ersetzt verlinkt, beschreiben aber eine Version, die es nicht mehr gibt. 31.12.2026 ist das Datum für **v2**."
+          }
+        },
+        {
+          "id": "l09t07s2",
+          "type": "freshness",
+          "title": "SLA für Pro",
+          "prompt": "Welche Verfügbarkeit ist für den Pro-Plan heute vertraglich garantiert?",
+          "xp": 25,
+          "difficulty": 2,
+          "explanation": "Siehe *Versionierung und superseded_by*.",
+          "visual": "timeline",
+          "question": "Welche Verfügbarkeit garantiert NovaCloud vertraglich für den Pro-Plan?",
+          "documents": [
+            {
+              "id": "d12",
+              "title": "Service Level Agreement 2023",
+              "date": "2023-07-01",
+              "version": "1.0",
+              "text": "NovaCloud garantiert für die Pläne Pro und Business eine monatliche Verfügbarkeit von 99,5 %. Geplante Wartungsarbeiten werden mindestens 48 Stunden vorher angekündigt und nicht auf die Verfügbarkeit angerechnet.\n\nWird die zugesagte Verfügbarkeit unterschritten, erhalten Kunden eine Gutschrift von 10 % der Monatsgebühr. Gutschriften müssen innerhalb von 30 Tagen nach Monatsende beantragt werden.\n\nNicht als Ausfall gelten Störungen, die durch höhere Gewalt, durch Kunden selbst oder durch Drittanbieter-Integrationen verursacht werden. Der Starter-Plan ist vom SLA ausgenommen. Die Verfügbarkeit wird pro Kalendermonat in Minuten gemessen und auf der Statusseite veröffentlicht.",
+              "source": "Vertragsunterlagen"
+            },
+            {
+              "id": "d13",
+              "title": "Service Level Agreement 2025",
+              "date": "2025-07-01",
+              "version": "2.0",
+              "text": "Aktuelles SLA, gültig ab 1. Juli 2025. Es ersetzt das SLA von 2023.\n\nZugesagte monatliche Verfügbarkeit: Business-Plan 99,9 %, Enterprise-Plan 99,95 %. Für den Pro-Plan gibt es keine vertraglich zugesicherte Verfügbarkeit mehr, angestrebt werden 99,5 %.\n\nGutschriften: Liegt die Verfügbarkeit unter 99,9 %, erhalten Business-Kunden 10 % der Monatsgebühr gutgeschrieben, unter 99,0 % sind es 25 %. Das reguläre Wartungsfenster ist sonntags von 02:00 bis 04:00 Uhr MEZ. Gutschriften werden automatisch mit der nächsten Rechnung verrechnet.\n\nDie Messung erfolgt minutengenau durch ein externes Monitoring an drei Standorten. Der Starter-Plan ist weiterhin vom SLA ausgenommen.",
+              "source": "Vertragsunterlagen"
+            }
+          ],
+          "options": [
+            {
+              "id": "a",
+              "text": "99,5 %"
+            },
+            {
+              "id": "b",
+              "text": "99,9 %"
+            },
+            {
+              "id": "c",
+              "text": "Keine – 99,5 % sind nur angestrebt."
+            },
+            {
+              "id": "d",
+              "text": "99,95 %"
+            }
+          ],
+          "solution": {
+            "correct": "c",
+            "why": "Das SLA 2025 ersetzt das SLA 2023: Für Pro gibt es keine vertragliche Zusage mehr, nur ein Ziel von 99,5 %. Die alte Version hätte „99,5 % garantiert“ ergeben."
+          }
+        },
+        {
+          "id": "l09t07s3",
+          "type": "better",
+          "title": "Forum vs. Preisblatt",
+          "prompt": "Was wäre besser?",
+          "xp": 25,
+          "difficulty": 2,
+          "explanation": "Siehe *Konfliktauflösung: Aktualität vs. Autorität*.",
+          "scenario": "Angenommen, im Index fehlt das Preisblatt 2026. Für die Preisfrage konkurrieren das offizielle Preisblatt 2024 (14,90 €) und der Forenbeitrag vom Februar 2026 (7,99 €).",
+          "variant_a": {
+            "label": "Neuestes gewinnt",
+            "description": "Reine Aktualität: Der Forenbeitrag ist neuer, also 7,99 €."
+          },
+          "variant_b": {
+            "label": "Autorität vor Aktualität",
+            "description": "Offizielle Quellen schlagen inoffizielle; Antwort 14,90 € mit Hinweis auf das Datum der Quelle (Juni 2024) und Empfehlung, das aktuelle Preisblatt zu prüfen."
+          },
+          "solution": {
+            "correct": "b",
+            "why": "**B**: Ein ungeprüfter Forenbeitrag darf eine offizielle Quelle nicht überstimmen, nur weil er neuer ist. Der Hinweis auf das Quelldatum ist wichtig, weil 14,90 € tatsächlich veraltet sein *könnte* – Transparenz statt falscher Sicherheit. *Trade-off:* Autoritätsregeln müssen gepflegt werden, und manchmal sind inoffizielle Quellen früher richtig (z. B. Status-Meldungen von Nutzern bei einem Ausfall)."
+          }
+        },
+        {
+          "id": "l09t07s4",
+          "type": "code",
+          "title": "Stale-Check",
+          "prompt": "Ein Chunk gilt als veraltet, wenn sein Dokument einen Nachfolger hat. Vervollständige den Filter.",
+          "xp": 25,
+          "difficulty": 2,
+          "explanation": "Nur Chunks ohne Nachfolger-Dokument bleiben – für Jetzt-Fragen.",
+          "language": "python",
+          "template": "def drop_superseded(chunks, docs):\n    return [c for c in chunks if {{1}}]",
+          "blanks": [
+            {
+              "id": "1",
+              "placeholder": "Bedingung"
+            }
+          ],
+          "solution": {
+            "blanks": {
+              "1": [
+                "docs[c['doc_id']]['superseded_by'] is None",
+                "not docs[c['doc_id']]['superseded_by']",
+                "docs[c[\"doc_id\"]][\"superseded_by\"] is None",
+                "docs[c['doc_id']].get('superseded_by') is None",
+                "not docs[c['doc_id']].get('superseded_by')"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

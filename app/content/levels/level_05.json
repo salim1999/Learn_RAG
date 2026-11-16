@@ -1,0 +1,415 @@
+{
+  "id": 5,
+  "title": "Reranking & Kontextauswahl",
+  "subtitle": "Die richtigen Chunks in der richtigen Reihenfolge",
+  "icon": "🎯",
+  "color": "#ff7ab6",
+  "theory": [
+    {
+      "heading": "Bi-Encoder vs. Cross-Encoder",
+      "body_md": "**Bi-Encoder** (das Embedding-Modell aus Level 3) kodieren Frage und Dokument *getrennt*. Dokumente lassen sich vorab einbetten – deshalb ist die Suche über Millionen Chunks in Millisekunden möglich. Nachteil: Frage und Dokument „sehen“ sich nie gegenseitig.\n\n**Cross-Encoder** bekommen Frage *und* Chunk gemeinsam als Eingabe und geben direkt einen Relevanz-Score aus. Jedes Token der Frage kann auf jedes Token des Chunks achten (Attention). Das ist deutlich genauer – aber pro Paar ein Modellaufruf, also nicht für den ganzen Index machbar.\n\n| | Bi-Encoder | Cross-Encoder |\n|---|---|---|\n| Eingabe | Frage und Chunk getrennt | Frage + Chunk zusammen |\n| Vorberechnung | ja | nein |\n| Geschwindigkeit | sehr schnell | langsam (pro Paar) |\n| Genauigkeit | gut | sehr gut |\n\nAlternativen zum Cross-Encoder: ein LLM als Reranker (teurer, flexibel) oder Late-Interaction-Modelle wie ColBERT (Token-Vektoren, Mittelweg).",
+      "key_points": [
+        "Bi-Encoder: schnell, vorab berechenbar.",
+        "Cross-Encoder: genau, aber pro Paar teuer.",
+        "Deshalb: zweistufig."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Zweistufiges Retrieval",
+      "body_md": "Die Standardarchitektur: **breit und billig abrufen, dann schmal und teuer sortieren.**\n\n1. **Stufe 1 (Recall):** BM25/Dense/Hybrid holt z. B. top-50.\n2. **Stufe 2 (Precision):** Ein Cross-Encoder bewertet die 50 Paare neu.\n3. **Auswahl:** Die besten 3–8 Chunks gehen ins Prompt.\n\n```python\nkandidaten = hybrid_search(frage, k=50)\nscores = cross_encoder.predict([(frage, c.text) for c in kandidaten])\ntop = [c for _, c in sorted(zip(scores, kandidaten), key=lambda x: -x[0])][:5]\n```\n\n**Wichtig:** Der Reranker kann nur sortieren, was Stufe 1 gefunden hat. Fehlt der relevante Chunk in den top-50, hilft kein Reranker.\n\n**Typischer Fehler:** Reranking mit k = 5 in Stufe 1 – dann gibt es nichts mehr zu verbessern.",
+      "key_points": [
+        "Stufe 1 maximiert Recall, Stufe 2 Precision.",
+        "Reranker kann nichts herbeizaubern, was Stufe 1 verpasst hat.",
+        "Stufe-1-k deutlich größer als Endauswahl."
+      ],
+      "visual": "pipeline"
+    },
+    {
+      "heading": "Lost in the Middle",
+      "body_md": "Studien (u. a. Liu et al., 2023, „Lost in the Middle“) zeigten: Sprachmodelle nutzen Informationen am **Anfang** und **Ende** eines langen Kontexts deutlich besser als in der **Mitte**. Neuere Modelle sind robuster geworden, aber der Effekt ist bei langen, verrauschten Kontexten weiterhin messbar.\n\nKonsequenzen:\n- **Weniger ist mehr:** 5 relevante Chunks schlagen oft 30 halb relevante.\n- **Reihenfolge:** Die wichtigsten Chunks an den Anfang (und ggf. ans Ende), Schwächeres in die Mitte.\n- **Frage am Ende wiederholen**, wenn der Kontext lang ist.\n\n> **Merksatz:** Ein größeres Kontextfenster ist kein Freifahrtschein für mehr Kontext.",
+      "key_points": [
+        "Mitte langer Kontexte wird schlechter genutzt.",
+        "Wichtiges an den Rand.",
+        "Wenige gute Chunks > viele mittelmäßige."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Kontextbudget, Deduplizierung, Kompression",
+      "body_md": "Jedes Token im Kontext kostet Geld und Latenz und kann ablenken. Ein **Kontextbudget** (z. B. 3.000 Tokens) erzwingt Disziplin:\n\n- **Deduplizieren:** Fast identische Chunks (Overlap, kopierte FAQs, alte Versionen) entfernen.\n- **Greedy-Packing:** Chunks in Score-Reihenfolge hinzufügen, bis das Budget erreicht ist.\n- **Kompression:** Irrelevante Sätze aus Chunks streichen (extraktiv) oder zusammenfassen – Achtung, Zusammenfassen kann selbst halluzinieren.\n- **Relevanz-Schwelle:** Chunks unter einem Reranker-Score gar nicht aufnehmen.\n\n```python\ndef pack(chunks, budget, count_tokens):\n    auswahl, used = [], 0\n    for c in sorted(chunks, key=lambda c: c.score, reverse=True):\n        t = count_tokens(c.text)\n        if used + t <= budget:\n            auswahl.append(c)\n            used += t\n    return auswahl\n```",
+      "key_points": [
+        "Budget zwingt zur Auswahl.",
+        "Duplikate kosten Platz ohne Nutzen.",
+        "Kompression spart Tokens, birgt aber eigenes Risiko."
+      ],
+      "visual": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l05t01",
+      "type": "quiz",
+      "title": "Warum nicht nur Cross-Encoder?",
+      "prompt": "Warum ersetzt man die Vektorsuche nicht einfach komplett durch einen Cross-Encoder?",
+      "xp": 15,
+      "difficulty": 1,
+      "explanation": "Siehe *Bi-Encoder vs. Cross-Encoder*.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Cross-Encoder sind ungenauer als Bi-Encoder."
+        },
+        {
+          "id": "b",
+          "text": "Ein Cross-Encoder müsste für jede Frage mit jedem Chunk des Index einzeln aufgerufen werden."
+        },
+        {
+          "id": "c",
+          "text": "Cross-Encoder können nur Englisch."
+        },
+        {
+          "id": "d",
+          "text": "Cross-Encoder brauchen keine GPU."
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "b"
+        ],
+        "option_explanations": {
+          "a": "Umgekehrt – sie sind genauer.",
+          "b": "Richtig – keine Vorberechnung möglich, Aufwand linear in der Indexgröße pro Anfrage.",
+          "c": "Es gibt mehrsprachige Cross-Encoder.",
+          "d": "Irrelevant für die Frage."
+        }
+      }
+    },
+    {
+      "id": "l05t02",
+      "type": "better",
+      "title": "Mehr Kontext oder Reranking?",
+      "prompt": "Was wäre besser?",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Siehe *Zweistufiges Retrieval* und *Lost in the Middle*.",
+      "scenario": "Das Modell hat ein Kontextfenster von 256.000 Tokens. Ein Kollege schlägt vor, einfach die top-50 Chunks ins Prompt zu packen, statt einen Reranker einzubauen.",
+      "variant_a": {
+        "label": "Top-50 direkt ins Prompt",
+        "description": "Kein Reranker; das Modell sucht sich das Relevante selbst."
+      },
+      "variant_b": {
+        "label": "Top-50 → Cross-Encoder → Top-5",
+        "description": "Reranker sortiert neu, nur die besten fünf gehen ins Prompt."
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**Variante B** ist in fast allen Fällen besser: weniger Tokens (Kosten, Latenz), weniger Ablenkung und weniger *Lost in the Middle*. Außerdem fallen veraltete oder off-topic Chunks eher heraus.\n\n*Trade-off:* Der Reranker kostet selbst Latenz (50 Paare) und kann einen relevanten Chunk fälschlich aussortieren – bei Fragen, die viele Belege brauchen (Zusammenfassungen, Vergleiche), kann eine größere Endauswahl sinnvoll sein. Dann lieber k = 10–15 statt 5 als ganz auf Reranking zu verzichten."
+      }
+    },
+    {
+      "id": "l05t03",
+      "type": "tune",
+      "title": "Präziser Kontext",
+      "prompt": "Frage: **„Wann findet das reguläre Wartungsfenster statt?“** Die Antwort steht in genau einem Dokument. Mit k = 8 ist der Kontext voller Rauschen. Reduziere *k*, sodass mindestens die Hälfte des Kontexts relevant ist (Reranking ist bereits aktiv).",
+      "xp": 40,
+      "difficulty": 2,
+      "explanation": "Nur das SLA 2025 nennt das Wartungsfenster (sonntags 02:00–04:00 Uhr MEZ). Bei k = 8 sind höchstens ein, zwei Treffer relevant – Precision ≈ 0,1–0,25. Mit k = 1–2 und Reranking steigt die Precision deutlich. Der Preis: Bei Fragen mit mehreren benötigten Belegen würde ein so kleines k den Recall gefährden.",
+      "hint": "Weniger ist hier mehr.",
+      "query": "Wann findet das reguläre Wartungsfenster statt?",
+      "params": [
+        {
+          "name": "retrieval.k",
+          "label": "Anzahl Treffer k",
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "default": 8
+        }
+      ],
+      "target": {
+        "metric": "precision_at_k",
+        "threshold": 0.5,
+        "label": "Precision@k ≥ 50 %"
+      },
+      "base_config": {
+        "query": "Wann findet das reguläre Wartungsfenster statt?",
+        "corpus": "default",
+        "chunking": {
+          "strategy": "recursive",
+          "size": 300,
+          "overlap": 50
+        },
+        "retrieval": {
+          "method": "bm25",
+          "k": 8,
+          "mmr": false,
+          "mmr_lambda": 0.7,
+          "rerank": true
+        },
+        "freshness": {
+          "enabled": false,
+          "half_life_days": 365,
+          "drop_superseded": false,
+          "as_of": "2026-11-16"
+        },
+        "generation": {
+          "mode": "extractive",
+          "strict_grounding": true,
+          "abstain_threshold": 0.2,
+          "require_citations": true
+        },
+        "verify": true
+      },
+      "solution": {
+        "relevant_doc_ids": [
+          "d13"
+        ],
+        "example_params": {
+          "retrieval.k": 2
+        }
+      }
+    },
+    {
+      "id": "l05t04",
+      "type": "order",
+      "title": "Zweistufige Pipeline",
+      "prompt": "Sortiere die Schritte.",
+      "xp": 25,
+      "difficulty": 2,
+      "explanation": "Dedup vor dem Reranking spart teure Cross-Encoder-Aufrufe; Budget und Anordnung kommen zuletzt.",
+      "visual": "pipeline",
+      "items": [
+        {
+          "id": "s1",
+          "text": "Hybrid-Retrieval holt top-50 Kandidaten"
+        },
+        {
+          "id": "s2",
+          "text": "Fast identische Kandidaten deduplizieren"
+        },
+        {
+          "id": "s3",
+          "text": "Cross-Encoder bewertet jedes (Frage, Chunk)-Paar"
+        },
+        {
+          "id": "s4",
+          "text": "Chunks unter der Relevanzschwelle verwerfen"
+        },
+        {
+          "id": "s5",
+          "text": "Beste Chunks bis zum Token-Budget auswählen"
+        },
+        {
+          "id": "s6",
+          "text": "Wichtigste Chunks an den Anfang des Kontexts stellen"
+        }
+      ],
+      "solution": {
+        "order": [
+          "s1",
+          "s2",
+          "s3",
+          "s4",
+          "s5",
+          "s6"
+        ]
+      }
+    },
+    {
+      "id": "l05t05",
+      "type": "code",
+      "title": "Greedy-Kontextpacking",
+      "prompt": "Vervollständige die Funktion, die Chunks nach Score absteigend in ein Token-Budget packt.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Absteigend sortieren (`reverse=True`), und nur aufnehmen, wenn `used + t <= budget`.",
+      "language": "python",
+      "template": "def pack(chunks, budget, count_tokens):\n    auswahl, used = [], 0\n    for c in sorted(chunks, key=lambda c: c[\"score\"], reverse={{1}}):\n        t = count_tokens(c[\"text\"])\n        if {{2}}:\n            auswahl.append(c)\n            used += t\n    return auswahl",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Sortierrichtung"
+        },
+        {
+          "id": "2",
+          "placeholder": "Budget-Bedingung"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "True"
+          ],
+          "2": [
+            "used + t <= budget",
+            "used+t<=budget",
+            "t + used <= budget",
+            "budget >= used + t",
+            "used + t < budget + 1"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l05t06",
+      "type": "explain",
+      "title": "Lost in the Middle",
+      "prompt": "Erkläre kurz.",
+      "xp": 35,
+      "difficulty": 2,
+      "explanation": "Siehe *Lost in the Middle*.",
+      "question": "Was beschreibt der „Lost in the Middle“-Effekt, und welche zwei Konsequenzen ziehst du daraus für die Kontextauswahl?",
+      "solution": {
+        "rubric": [
+          {
+            "concept": "Informationen in der Mitte langer Kontexte werden schlechter genutzt",
+            "keywords": [
+              "mitte",
+              "middle",
+              "mittleren"
+            ]
+          },
+          {
+            "concept": "Anfang und Ende werden besser genutzt",
+            "keywords": [
+              "anfang",
+              "ende",
+              "rand",
+              "beginn",
+              "zuerst",
+              "zuletzt"
+            ]
+          },
+          {
+            "concept": "Weniger, relevantere Chunks verwenden",
+            "keywords": [
+              "weniger",
+              "kürzer",
+              "reduz",
+              "rerank",
+              "auswahl",
+              "budget",
+              "nur die besten"
+            ]
+          },
+          {
+            "concept": "Wichtigste Chunks gezielt platzieren",
+            "keywords": [
+              "reihenfolge",
+              "platzier",
+              "anordn",
+              "sortier",
+              "an den anfang",
+              "vorne"
+            ]
+          }
+        ],
+        "model_answer": "„Lost in the Middle“ bezeichnet die Beobachtung, dass Sprachmodelle relevante Informationen am Anfang und am Ende eines langen Kontexts zuverlässiger nutzen als in der Mitte.\n\nKonsequenzen: (1) Den Kontext klein und relevant halten – lieber reranken und 5 gute Chunks liefern als 30 mittelmäßige. (2) Die Reihenfolge bewusst wählen: die stärksten Belege an den Anfang (und ggf. ans Ende), schwächere in die Mitte, und bei langen Kontexten die Frage am Ende wiederholen.",
+        "pass_ratio": 0.6
+      }
+    },
+    {
+      "id": "l05t07",
+      "type": "boss",
+      "title": "Boss: Der Kontext-Kraken",
+      "prompt": "Der Kraken stopft dein Kontextfenster voll. Befreie es!",
+      "xp": 100,
+      "difficulty": 3,
+      "explanation": "Kontext entrümpelt: Dedup, Reranking, Schwelle, Anordnung.",
+      "story": "NovaMind-Antworten sind langsam, teuer und übersehen Fakten. Ein Blick ins Log zeigt: 40 Chunks pro Anfrage, darunter viele Duplikate und vier Versionen der Rate-Limit-Seite.",
+      "lives": 3,
+      "steps": [
+        {
+          "id": "l05t07s1",
+          "type": "quiz",
+          "title": "Wo kommt der beste Chunk hin?",
+          "prompt": "Du hast nach dem Reranking fünf Chunks. Wo platzierst du den mit dem höchsten Score?",
+          "xp": 20,
+          "difficulty": 1,
+          "explanation": "Siehe *Lost in the Middle*.",
+          "options": [
+            {
+              "id": "a",
+              "text": "Genau in der Mitte"
+            },
+            {
+              "id": "b",
+              "text": "Am Anfang des Kontexts"
+            },
+            {
+              "id": "c",
+              "text": "Egal – das Modell liest alles gleich gut"
+            },
+            {
+              "id": "d",
+              "text": "Ganz weglassen, die Frage enthält ihn ja"
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "b"
+            ],
+            "option_explanations": {
+              "a": "Die Mitte wird am schlechtesten genutzt.",
+              "b": "Richtig.",
+              "c": "Lost in the Middle widerlegt das.",
+              "d": "Unsinn."
+            }
+          }
+        },
+        {
+          "id": "l05t07s2",
+          "type": "better",
+          "title": "Reranker-Position",
+          "prompt": "Was wäre besser?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Siehe *Kontextbudget, Deduplizierung, Kompression*.",
+          "scenario": "Du willst Kosten sparen. Der Cross-Encoder ist der teuerste Schritt.",
+          "variant_a": {
+            "label": "Erst deduplizieren, dann reranken",
+            "description": "Doppelte/fast identische Kandidaten vor dem Cross-Encoder entfernen."
+          },
+          "variant_b": {
+            "label": "Erst reranken, dann deduplizieren",
+            "description": "Alle Kandidaten reranken, danach Duplikate entfernen."
+          },
+          "solution": {
+            "correct": "a",
+            "why": "**A** spart Cross-Encoder-Aufrufe für Duplikate – bei 40 Kandidaten mit vielen Dopplungen ein großer Gewinn. *Trade-off:* Dedup vor dem Reranking muss entscheiden, *welches* Duplikat bleibt, ohne den genauen Score zu kennen; meist behält man das mit dem besten Stufe-1-Score oder dem neuesten Datum."
+          }
+        },
+        {
+          "id": "l05t07s3",
+          "type": "code",
+          "title": "Schwelle anwenden",
+          "prompt": "Behalte nur Chunks, deren Reranker-Score mindestens `min_score` beträgt.",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Eine Relevanzschwelle verhindert, dass Rauschen nur deshalb in den Kontext gelangt, weil noch Budget frei ist.",
+          "language": "python",
+          "template": "def filter_relevant(chunks, min_score=0.3):\n    return [c for c in chunks if {{1}}]",
+          "blanks": [
+            {
+              "id": "1",
+              "placeholder": "Bedingung"
+            }
+          ],
+          "solution": {
+            "blanks": {
+              "1": [
+                "c['score'] >= min_score",
+                "c[\"score\"] >= min_score",
+                "c['score']>=min_score",
+                "min_score <= c['score']"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

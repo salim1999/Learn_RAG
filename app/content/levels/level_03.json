@@ -1,0 +1,359 @@
+{
+  "id": 3,
+  "title": "Embeddings & Vektorraum",
+  "subtitle": "Bedeutung als Geometrie",
+  "icon": "🧲",
+  "color": "#4cc9f0",
+  "theory": [
+    {
+      "heading": "Was ist ein Embedding?",
+      "body_md": "Ein **Embedding** ist ein Vektor aus Zahlen (z. B. 1.024 oder 1.536 Dimensionen), der die Bedeutung eines Textes repräsentiert. Ein Embedding-Modell wird so trainiert, dass **inhaltlich ähnliche Texte nahe beieinander** liegen.\n\n- „Wie viel kostet der Pro-Plan?“ und „Preis Pro-Abo pro Monat“ → ähnliche Vektoren, obwohl kaum Wörter gleich sind.\n- „Papierkorb-Frist“ und „Rate-Limit“ → weit entfernt.\n\nDie Suche läuft dann so: Frage einbetten → die nächsten Nachbarn im Vektorraum finden (**k-Nearest-Neighbors**). Für Millionen Vektoren nutzt man **approximative** Verfahren (ANN, z. B. HNSW-Graphen), die etwas Genauigkeit gegen enorme Geschwindigkeit tauschen.\n\n> **Merksatz:** Embeddings finden Bedeutung, nicht Buchstaben.",
+      "key_points": [
+        "Embedding = Bedeutungsvektor.",
+        "Ähnliche Bedeutung → geringer Abstand.",
+        "ANN-Indizes (z. B. HNSW) machen die Suche schnell, aber approximativ."
+      ],
+      "visual": "vectorspace"
+    },
+    {
+      "heading": "Cosine-Similarity",
+      "body_md": "Das Standardmaß für Ähnlichkeit ist die **Kosinus-Ähnlichkeit**: der Kosinus des Winkels zwischen zwei Vektoren.\n\n```\ncos(a, b) = (a · b) / (‖a‖ · ‖b‖)\n```\n\nWerte nahe 1 = gleiche Richtung (ähnlich), 0 = orthogonal (unabhängig), −1 = entgegengesetzt.\n\n```python\nimport numpy as np\n\ndef cosine(a, b):\n    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))\n\n# Sind alle Vektoren auf Länge 1 normiert, reicht das Skalarprodukt:\na = a / np.linalg.norm(a)\n```\n\nWeil viele Vektordatenbanken intern Skalarprodukt rechnen, normiert man Embeddings oft beim Speichern. **Typischer Fehler:** Normierung vergessen und Skalarprodukt nutzen – dann gewinnen lange Vektoren statt ähnlicher.",
+      "key_points": [
+        "Kosinus misst den Winkel, nicht die Länge.",
+        "Normierte Vektoren: Skalarprodukt = Kosinus.",
+        "Absolute Score-Werte sind modellabhängig – Schwellen kalibrieren!"
+      ],
+      "visual": "vectorspace"
+    },
+    {
+      "heading": "Sparse vs. Dense",
+      "body_md": "**Sparse-Vektoren** (TF-IDF, BM25) haben eine Dimension pro Wort des Vokabulars; fast alle Einträge sind 0. Sie finden **exakte Begriffe** sehr zuverlässig: Fehlercodes, Produktnamen, Präfixe wie `nc_live_`, Paragraphen.\n\n**Dense-Vektoren** (neuronale Embeddings) haben wenige hundert bis tausend Dimensionen, alle belegt. Sie finden **Synonyme und Paraphrasen**, scheitern aber oft an seltenen Kennungen, Zahlen und Fachkürzeln, die sie nie gesehen haben.\n\n| | Sparse (BM25) | Dense (Embeddings) |\n|---|---|---|\n| Synonyme | schwach | stark |\n| exakte IDs/Zahlen | stark | schwach |\n| Training nötig | nein | ja (vortrainiert) |\n| Erklärbarkeit | hoch | gering |\n\nDeshalb kombinieren moderne Systeme beides (**Hybrid-Suche**, Level 4).",
+      "key_points": [
+        "Sparse = exakte Wörter, Dense = Bedeutung.",
+        "Seltene IDs und Zahlen: Sparse gewinnt.",
+        "Hybrid kombiniert beide Stärken."
+      ],
+      "visual": null
+    },
+    {
+      "heading": "Grenzen und Fallstricke von Embeddings",
+      "body_md": "- **Negation**: „Pläne *mit* SSO“ und „Pläne *ohne* SSO“ liegen oft sehr nah beieinander.\n- **Zahlen**: „10 GB“ und „50 GB“ sind für ein Embedding fast dasselbe – für den Nutzer nicht.\n- **Domänenvokabular**: Interne Abkürzungen kennt ein allgemeines Modell nicht.\n- **Asymmetrie**: Fragen sind kurz, Dokumente lang. Manche Modelle erwarten deshalb Präfixe wie „query:“ und „passage:“.\n- **Modellwechsel**: Vektoren verschiedener Modelle (oder Dimensionen, z. B. 1.024 → 1.536) sind **nicht vergleichbar**. Ein Modellwechsel bedeutet: **kompletter Re-Index**. NovaCloud weist in den Release Notes 4.0 genau darauf hin.\n\n> **Merksatz:** Frage und Dokumente müssen mit *demselben* Modell eingebettet werden.",
+      "key_points": [
+        "Negation und Zahlen sind Schwachstellen.",
+        "Asymmetrische Modelle brauchen Query-/Passage-Präfixe.",
+        "Modellwechsel = Re-Index."
+      ],
+      "visual": "vectorspace"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "l03t01",
+      "type": "quiz",
+      "title": "Was misst Cosine-Similarity?",
+      "prompt": "Zwei Vektoren zeigen in exakt dieselbe Richtung, einer ist aber doppelt so lang. Welche Kosinus-Ähnlichkeit haben sie?",
+      "xp": 15,
+      "difficulty": 1,
+      "explanation": "Kosinus misst den **Winkel**, nicht die Länge. Siehe *Cosine-Similarity*.",
+      "visual": "vectorspace",
+      "options": [
+        {
+          "id": "a",
+          "text": "0,5"
+        },
+        {
+          "id": "b",
+          "text": "1,0"
+        },
+        {
+          "id": "c",
+          "text": "2,0"
+        },
+        {
+          "id": "d",
+          "text": "Das hängt von der Dimension ab."
+        }
+      ],
+      "multi": false,
+      "solution": {
+        "correct": [
+          "b"
+        ],
+        "option_explanations": {
+          "a": "Die Länge spielt beim Kosinus keine Rolle.",
+          "b": "Richtig – gleiche Richtung ⇒ Winkel 0 ⇒ cos = 1.",
+          "c": "Kosinus liegt immer zwischen −1 und 1.",
+          "d": "Der Kosinus ist dimensionsunabhängig definiert."
+        }
+      }
+    },
+    {
+      "id": "l03t02",
+      "type": "code",
+      "title": "Cosine-Similarity implementieren",
+      "prompt": "Vervollständige die Funktion mit NumPy.",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Kosinus = Skalarprodukt geteilt durch das Produkt der euklidischen Normen.",
+      "language": "python",
+      "template": "import numpy as np\n\ndef cosine_similarity(a, b):\n    dot = {{1}}\n    norm = {{2}}\n    return dot / norm",
+      "blanks": [
+        {
+          "id": "1",
+          "placeholder": "Skalarprodukt"
+        },
+        {
+          "id": "2",
+          "placeholder": "Produkt der Längen"
+        }
+      ],
+      "solution": {
+        "blanks": {
+          "1": [
+            "np.dot(a, b)",
+            "a @ b",
+            "np.dot(a,b)",
+            "a.dot(b)",
+            "np.sum(a * b)",
+            "(a * b).sum()"
+          ],
+          "2": [
+            "np.linalg.norm(a) * np.linalg.norm(b)",
+            "np.linalg.norm(a)*np.linalg.norm(b)",
+            "np.sqrt(np.dot(a, a)) * np.sqrt(np.dot(b, b))",
+            "np.sqrt(a @ a) * np.sqrt(b @ b)"
+          ]
+        }
+      }
+    },
+    {
+      "id": "l03t03",
+      "type": "better",
+      "title": "API-Schlüssel-Präfix suchen",
+      "prompt": "Was wäre besser?",
+      "xp": 30,
+      "difficulty": 2,
+      "explanation": "Siehe *Sparse vs. Dense*.",
+      "scenario": "Entwickler fragen: *„Was bedeutet das Präfix nc_test_?“* Die Antwort steht im Dokument „API-Authentifizierung“. Das Embedding-Modell ist ein allgemeines Modell, das die Zeichenkette `nc_test_` nie gesehen hat.",
+      "variant_a": {
+        "label": "Nur Dense-Retrieval",
+        "description": "Frage einbetten und die nächsten Nachbarn suchen."
+      },
+      "variant_b": {
+        "label": "Hybrid (BM25 + Dense)",
+        "description": "Stichwortsuche und Vektorsuche kombinieren und Ergebnisse fusionieren."
+      },
+      "solution": {
+        "correct": "b",
+        "why": "**Hybrid ist besser.** Die seltene Kennung `nc_test_` ist ein exakter Token, den BM25 zuverlässig trifft; das Dense-Modell zerlegt sie in bedeutungsarme Subword-Stücke und findet eher allgemeine API-Dokumente.\n\n*Trade-off:* Hybrid kostet einen zweiten Index und eine Fusionslogik (z. B. RRF). Für reine Paraphrase-Fragen ohne Kennungen bringt BM25 wenig zusätzlich – dort kann Dense allein genügen."
+      }
+    },
+    {
+      "id": "l03t04",
+      "type": "quiz",
+      "title": "Embedding-Fallstricke",
+      "prompt": "Welche Probleme sind typisch für Dense-Embeddings? (Mehrfachauswahl)",
+      "xp": 20,
+      "difficulty": 2,
+      "explanation": "Siehe *Grenzen und Fallstricke von Embeddings*.",
+      "options": [
+        {
+          "id": "a",
+          "text": "„Pläne mit SSO“ und „Pläne ohne SSO“ erhalten sehr ähnliche Vektoren."
+        },
+        {
+          "id": "b",
+          "text": "„10 GB“ und „50 GB“ sind kaum unterscheidbar."
+        },
+        {
+          "id": "c",
+          "text": "Synonyme wie „Preis“ und „Kosten“ werden nicht erkannt."
+        },
+        {
+          "id": "d",
+          "text": "Nach einem Wechsel von 1.024 auf 1.536 Dimensionen sind alte Vektoren unbrauchbar."
+        }
+      ],
+      "multi": true,
+      "solution": {
+        "correct": [
+          "a",
+          "b",
+          "d"
+        ],
+        "option_explanations": {
+          "a": "Richtig – Negation ist eine bekannte Schwäche.",
+          "b": "Richtig – Zahlen tragen im Embedding wenig Gewicht.",
+          "c": "Falsch – genau das ist die Stärke von Dense-Embeddings.",
+          "d": "Richtig – andere Modelle/Dimensionen ⇒ Re-Index."
+        }
+      }
+    },
+    {
+      "id": "l03t05",
+      "type": "explain",
+      "title": "Ein Modell für alles",
+      "prompt": "Erkläre kurz.",
+      "xp": 35,
+      "difficulty": 2,
+      "explanation": "Siehe *Grenzen und Fallstricke von Embeddings*.",
+      "question": "Warum müssen Nutzerfrage und Dokumente mit demselben Embedding-Modell eingebettet werden, und was bedeutet das bei einem Modellwechsel?",
+      "solution": {
+        "rubric": [
+          {
+            "concept": "Vektorräume verschiedener Modelle sind nicht vergleichbar",
+            "keywords": [
+              "vergleich",
+              "anderer raum",
+              "unterschiedlich",
+              "inkompatib",
+              "nicht kompatibel",
+              "eigener raum",
+              "andere bedeutung"
+            ]
+          },
+          {
+            "concept": "Ähnlichkeit/Abstand nur im selben Raum sinnvoll",
+            "keywords": [
+              "ähnlich",
+              "abstand",
+              "kosinus",
+              "cosine",
+              "distanz",
+              "nähe"
+            ]
+          },
+          {
+            "concept": "Modellwechsel erfordert Neuberechnung aller Vektoren (Re-Index)",
+            "keywords": [
+              "re-index",
+              "reindex",
+              "neu berechn",
+              "neuberechn",
+              "neu einbett",
+              "neu indexier",
+              "alle vektoren"
+            ]
+          },
+          {
+            "concept": "Dimensionen können sich unterscheiden",
+            "keywords": [
+              "dimension",
+              "1024",
+              "1.024",
+              "1536",
+              "1.536",
+              "länge"
+            ]
+          }
+        ],
+        "model_answer": "Jedes Embedding-Modell lernt seinen eigenen Vektorraum: Dimension 17 bedeutet in Modell A etwas völlig anderes als in Modell B, und die Dimensionen können sogar verschieden viele sein (z. B. 1.024 vs. 1.536). Kosinus-Ähnlichkeit ist deshalb nur zwischen Vektoren desselben Modells sinnvoll.\n\nBei einem Modellwechsel müssen **alle** Dokument-Chunks neu eingebettet werden (Re-Index). In der Praxis baut man den neuen Index parallel auf und schaltet erst um, wenn er vollständig ist.",
+        "pass_ratio": 0.6
+      }
+    },
+    {
+      "id": "l03t06",
+      "type": "boss",
+      "title": "Boss: Der Vektor-Labyrinth-Wächter",
+      "prompt": "Besiege den Wächter in drei Runden.",
+      "xp": 90,
+      "difficulty": 3,
+      "explanation": "Du hast die drei Klassiker gemeistert: inkompatible Vektorräume, Normierung und die Grenzen dichter Embeddings.",
+      "visual": "vectorspace",
+      "story": "Das NovaCloud-Supportteam beschwert sich: Der neue Bot findet bei Fragen nach Fehlercodes und Präfixen nichts, und seit dem Update auf nova-3 liefern Suchen nur noch Unsinn. Du hast drei Leben, um die Ursachen zu finden.",
+      "lives": 3,
+      "steps": [
+        {
+          "id": "l03t06s1",
+          "type": "quiz",
+          "title": "Unsinn nach dem Update",
+          "prompt": "Seit dem Wechsel auf das neue Embedding-Modell (1.536 Dimensionen) liefern Suchen zufällige Treffer. Die Dokumente wurden *nicht* neu eingebettet. Was ist die Ursache?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Modellwechsel ⇒ Re-Index.",
+          "options": [
+            {
+              "id": "a",
+              "text": "Die Vektordatenbank ist zu langsam."
+            },
+            {
+              "id": "b",
+              "text": "Query-Vektoren (neues Modell) werden mit Dokument-Vektoren (altes Modell) verglichen."
+            },
+            {
+              "id": "c",
+              "text": "Die Chunks sind zu klein."
+            },
+            {
+              "id": "d",
+              "text": "Die Temperatur des LLM ist zu hoch."
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "b"
+            ],
+            "option_explanations": {
+              "a": "Langsamkeit erklärt keine falschen Treffer.",
+              "b": "Richtig – zwei inkompatible Vektorräume.",
+              "c": "Chunk-Größe hat sich nicht geändert.",
+              "d": "Das Retrieval ist schon vor dem LLM falsch."
+            }
+          }
+        },
+        {
+          "id": "l03t06s2",
+          "type": "code",
+          "title": "Normieren für Skalarprodukt-Suche",
+          "prompt": "Die Vektordatenbank rechnet nur Skalarprodukte. Normiere den Vektor, damit das Skalarprodukt der Kosinus-Ähnlichkeit entspricht.",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Ein Einheitsvektor hat Länge 1; dann gilt a·b = cos(a, b).",
+          "language": "python",
+          "template": "import numpy as np\n\ndef normalize(v):\n    return v / {{1}}",
+          "blanks": [
+            {
+              "id": "1",
+              "placeholder": "Länge des Vektors"
+            }
+          ],
+          "solution": {
+            "blanks": {
+              "1": [
+                "np.linalg.norm(v)",
+                "np.sqrt(np.dot(v, v))",
+                "np.sqrt(v @ v)",
+                "np.sqrt((v ** 2).sum())",
+                "np.sqrt(np.sum(v ** 2))",
+                "np.sqrt(np.sum(v**2))"
+              ]
+            }
+          }
+        },
+        {
+          "id": "l03t06s3",
+          "type": "better",
+          "title": "Fehlercodes finden",
+          "prompt": "Was wäre besser?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Siehe *Sparse vs. Dense*.",
+          "scenario": "Nutzer fragen nach „HTTP 429“ und „Retry-After“. Dense-Retrieval liefert allgemeine Fehlerseiten statt der Rate-Limit-Doku.",
+          "variant_a": {
+            "label": "Größeres Embedding-Modell",
+            "description": "Auf ein Embedding-Modell mit 3.072 Dimensionen wechseln."
+          },
+          "variant_b": {
+            "label": "BM25 ergänzen (Hybrid)",
+            "description": "Eine Stichwortsuche für exakte Tokens wie „429“ und „Retry-After“ hinzufügen."
+          },
+          "solution": {
+            "correct": "b",
+            "why": "**Hybrid** trifft exakte Tokens wie „429“ zuverlässig. Ein größeres Modell versteht Bedeutung besser, aber seltene Codes bleiben eine Schwäche dichter Vektoren – und der Wechsel kostet einen kompletten Re-Index. *Trade-off:* Hybrid braucht eine Fusion der Rankings und einen zweiten Index."
+          }
+        }
+      ]
+    }
+  ]
+}
