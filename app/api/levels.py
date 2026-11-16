@@ -48,16 +48,18 @@ def _grade_boss(task: dict, answer: dict) -> tuple[float, str, str, dict]:
     steps = [s for s in task.get("steps") or [] if isinstance(s, dict)]
     if not steps:
         raise GradingError("Boss ohne Steps")
-    try:
-        step = int(answer.get("step"))
-    except (TypeError, ValueError) as exc:
-        raise GradingError("'step' muss eine Zahl sein") from exc
+    step = answer.get("step")
+    if not isinstance(step, int) or isinstance(step, bool):
+        raise GradingError("'step' muss eine ganze Zahl sein")
     if not 0 <= step < len(steps):
         raise GradingError(f"'step' außerhalb 0..{len(steps) - 1}")
     lives_max = int(task.get("lives", 3) or 3)
     state = db.get_boss_state(task["id"], lives_max)
     if state["finished"]:  # neuer Versuch nach Sieg oder Niederlage
         state = {"lives": lives_max, "solved": [], "finished": False}
+    expected_step = next((i for i in range(len(steps)) if i not in state["solved"]), 0)
+    if step != expected_step:
+        raise GradingError(f"Bitte zuerst Etappe {expected_step + 1} lösen")
 
     s_task = steps[step]
     s_score, s_fb, s_details = grade_task(s_task, answer.get("answer") or {})
@@ -92,6 +94,20 @@ def _grade_boss(task: dict, answer: dict) -> tuple[float, str, str, dict]:
     return score, feedback, explanation, details
 
 
+@router.post("/levels/{level_id}/tasks/{task_id}/restart")
+def restart_boss(level_id: int, task_id: str) -> dict:
+    """Startet nur den Boss-Versuch neu; Bestwerte, Sterne und XP bleiben bestehen."""
+    _require_level(level_id)
+    task = content_loader.get_task(level_id, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Aufgabe nicht gefunden")
+    if task.get("type") != "boss":
+        raise HTTPException(status_code=422, detail="Nur Boss-Aufgaben können neu gestartet werden")
+    lives = int(task.get("lives", 3) or 3)
+    db.set_boss_state(task_id, lives, [], False)
+    return {"lives_left": lives, "solved_steps": [], "finished": False, "step": 0}
+
+
 @router.post("/levels/{level_id}/tasks/{task_id}/submit")
 def submit(level_id: int, task_id: str, body: dict[str, Any] = Body(...)) -> dict:
     _require_level(level_id)
@@ -111,12 +127,7 @@ def submit(level_id: int, task_id: str, body: dict[str, Any] = Body(...)) -> dic
     except GradingError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    old_best = db.get_best_score(task_id)
-    new_best = max(old_best, score)
-    xp_awarded = int(round(int(task.get("xp", 0) or 0) * max(0.0, new_best - old_best)))
-    if new_best > old_best:
-        db.set_best_score(task_id, level_id, new_best)
-    db.add_xp(task_id, xp_awarded)
+    xp_awarded = db.record_score(task_id, level_id, score, int(task.get("xp", 0) or 0))
     db.mark_activity()
     new_badges = prog.evaluate_badges()
     if new_badges:

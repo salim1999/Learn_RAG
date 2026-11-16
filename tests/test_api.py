@@ -89,9 +89,9 @@ def test_boss_lives_and_win(client):
 
 def test_boss_game_over_resets(client):
     for _ in range(3):
-        r = _submit(client, 1, "l01t10", {"step": 1, "answer": {"choice": "y"}})
+        r = _submit(client, 1, "l01t10", {"step": 0, "answer": {"selected": ["a"]}})
     assert r["details"]["lives_left"] == 0 and r["details"]["finished"] is True
-    r = _submit(client, 1, "l01t10", {"step": 1, "answer": {"choice": "y"}})
+    r = _submit(client, 1, "l01t10", {"step": 0, "answer": {"selected": ["a"]}})
     assert r["details"]["lives_left"] == 2  # neuer Versuch
 
 

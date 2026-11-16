@@ -17,7 +17,7 @@
     },
     {
       "heading": "Caching",
-      "body_md": "- **Exakter Cache:** Gleiche (normalisierte) Frage → gespeicherte Antwort. Sicher, aber niedrige Trefferquote.\n- **Semantischer Cache:** Ähnliche Frage (Embedding-Ähnlichkeit ≥ Schwelle) → gespeicherte Antwort. Hohe Trefferquote, aber Risiko: „Was kostet Pro?“ und „Was kostet Business?“ sind sich sehr ähnlich!\n- **Embedding-Cache:** Embeddings von Fragen/Chunks wiederverwenden.\n- **Prompt-Caching beim LLM-Anbieter:** Gleicher Präfix (System-Prompt) wird günstiger verarbeitet.\n\n**Invalidierung** ist der schwierige Teil: Ändert sich das Preisblatt, müssen alle Antworten, die das alte zitierten, verfallen. Lösung: Im Cache-Eintrag die **Dokument-IDs und Versionen** der Quellen speichern und bei Änderung gezielt löschen; zusätzlich eine **TTL**.\n\n```python\nkey = (normalize(frage), user_role, index_version)\n```\n\nDer Cache-Schlüssel muss auch **Zugriffsrechte** berücksichtigen – sonst bekommt ein Viewer die gecachte Antwort eines Admins.",
+      "body_md": "- **Exakter Cache:** Gleiche (normalisierte) Frage → gespeicherte Antwort. Sicher, aber niedrige Trefferquote.\n- **Semantischer Cache:** Ähnliche Frage (Embedding-Ähnlichkeit ≥ Schwelle) → gespeicherte Antwort. Hohe Trefferquote, aber Risiko: „Was kostet Pro?“ und „Was kostet Business?“ sind sich sehr ähnlich!\n- **Embedding-Cache:** Embeddings von Fragen/Chunks wiederverwenden.\n- **Prompt-Caching beim LLM-Anbieter:** Gleicher Präfix (System-Prompt) wird günstiger verarbeitet.\n\n**Invalidierung** ist der schwierige Teil: Ändert sich das Preisblatt, müssen alle Antworten, die das alte zitierten, verfallen. Lösung: Im Cache-Eintrag die **Dokument-IDs und Versionen** der Quellen speichern und bei Änderung gezielt löschen; zusätzlich eine **TTL**.\n\n```python\nkey = (normalize(frage), tenant_id, permissions_version, index_version)\n```\n\nDer Cache-Schlüssel muss **Mandant und wirksame Zugriffsrechte** berücksichtigen, einschließlich Rechteänderungen. Eine Rolle allein reicht nicht, wenn zwei Viewer unterschiedliche Ordner sehen dürfen. Sonst erhält ein Nutzer die gecachte Antwort einer anderen Person.",
       "key_points": [
         "Exakt = sicher, semantisch = riskant.",
         "Invalidierung über Quell-Versionen + TTL.",
@@ -110,7 +110,7 @@
       "type": "better",
       "title": "Pre- oder Post-Filter?",
       "prompt": "Was wäre besser?",
-      "xp": 35,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *Zugriffsrechte und ACL-Filter*.",
       "scenario": "Ein Kunde (Rolle Viewer) fragt: *„Ist eine Preiserhöhung für den Pro-Plan geplant?“* Die einzige Antwort steht in der vertraulichen Roadmap 2027 (nur Geschäftsführung).",
@@ -132,7 +132,7 @@
       "type": "better",
       "title": "Semantischer Cache",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *Caching*.",
       "scenario": "Du führst einen semantischen Antwort-Cache ein, um Kosten zu senken. Viele Fragen betreffen Preise, die sich etwa jährlich ändern.",
@@ -201,7 +201,7 @@
       "type": "code",
       "title": "ACL-Pre-Filter",
       "prompt": "Vervollständige den Filter: Ein Chunk ist erlaubt, wenn mindestens eine Gruppe des Nutzers in seiner ACL steht.",
-      "xp": 30,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Gefiltert wird **vor** der Suche – unzulässige Chunks sind für diesen Nutzer gar nicht erst Kandidaten.",
       "language": "python",
@@ -231,78 +231,14 @@
       }
     },
     {
-      "id": "l14t06",
-      "type": "explain",
-      "title": "Indirekte Prompt-Injection",
-      "prompt": "Erkläre kurz.",
-      "xp": 40,
-      "difficulty": 2,
-      "explanation": "Siehe *Prompt-Injection über Dokumente*.",
-      "question": "Was ist indirekte Prompt-Injection in RAG-Systemen, warum lässt sie sich nicht allein durch den System-Prompt verhindern, und welche Gegenmaßnahmen gibt es?",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Anweisung steckt in abgerufenem Dokument, nicht in der Nutzerfrage",
-            "keywords": [
-              "dokument",
-              "abgerufen",
-              "kontext",
-              "upload",
-              "indirekt",
-              "quelle"
-            ]
-          },
-          {
-            "concept": "Modell trennt Daten und Befehle nicht hart",
-            "keywords": [
-              "trenn",
-              "gleiche kontext",
-              "selben kontext",
-              "daten und befehl",
-              "keine grenze",
-              "nicht unterscheiden",
-              "kontextfenster"
-            ]
-          },
-          {
-            "concept": "Quellen-Vertrauen / Filter / Erkennung",
-            "keywords": [
-              "vertrau",
-              "filter",
-              "erkenn",
-              "prüf",
-              "klassifik",
-              "scan",
-              "markier"
-            ]
-          },
-          {
-            "concept": "Minimale Rechte / Ausgabeprüfung",
-            "keywords": [
-              "rechte",
-              "berechtig",
-              "bestätig",
-              "ausgab",
-              "allowlist",
-              "least privilege",
-              "werkzeug",
-              "tool"
-            ]
-          }
-        ],
-        "model_answer": "Bei **indirekter Prompt-Injection** platziert ein Angreifer Anweisungen in einem Dokument, das später abgerufen wird (z. B. „Ignoriere alle vorherigen Anweisungen …“ im Partner-Handbuch). Das LLM sieht System-Prompt und Dokumenttext im selben Kontextfenster und hat keine harte Grenze zwischen Daten und Befehlen – deshalb reduziert ein guter System-Prompt das Risiko, verhindert es aber nicht.\n\nGegenmaßnahmen in Schichten: Quellen nach Vertrauen markieren und Uploads prüfen, Injection-Muster bei Ingestion und Abfrage erkennen, Kontext im Prompt als Daten kennzeichnen, dem Modell nur minimale Rechte geben (keine folgenreichen Aktionen ohne Bestätigung) und Ausgaben gegen Policies und Allowlists prüfen.",
-        "pass_ratio": 0.6
-      }
-    },
-    {
       "id": "l14t07",
       "type": "boss",
       "title": "Boss: Der Produktions-Drache",
       "prompt": "Der letzte Gegner: Er greift über Kosten, Caches, Rechte und Zeit gleichzeitig an.",
-      "xp": 120,
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Der Drache ist besiegt! Du beherrschst RAG von der Theorie bis in die Produktion – Glückwunsch, RAG-Architekt!",
-      "story": "NovaMind geht für alle 1,2 Millionen Nutzer live. In der ersten Woche speit der Drache Feuer: Kosten explodieren, ein Kunde sieht interne Informationen, und der Bot nennt alte Preise. Vier Runden, drei Leben – werde zum RAG-Architekten!",
+      "story": "NovaMind geht für alle 1,2 Millionen Nutzer live. In der ersten Woche speit der Drache Feuer: Kosten explodieren, ein Kunde sieht interne Informationen, und der Bot nennt alte Preise. 5 Runden, drei Leben – werde zum RAG-Architekten!",
       "lives": 3,
       "steps": [
         {
@@ -421,10 +357,10 @@
           "id": "l14t07s4",
           "type": "code",
           "title": "Sicherer Cache-Schlüssel",
-          "prompt": "Baue einen Cache-Schlüssel, der Frage, Rolle **und** Index-Version enthält.",
+          "prompt": "Baue den Cache-Schlüssel für dieses vereinfachte Einzelmandanten-Beispiel aus Frage, Rolle **und** Index-Version. Hier haben alle Nutzer derselben Rolle identische Rechte; bei feineren ACLs müsste der Schlüssel zusätzlich den effektiven Berechtigungsstand enthalten.",
           "xp": 25,
           "difficulty": 2,
-          "explanation": "Rolle verhindert Rechte-Leaks, Index-Version verhindert veraltete Antworten nach einem Re-Index.",
+          "explanation": "Rolle verhindert Rechte-Leaks, Index-Version verhindert veraltete Antworten nach einem Re-Index. In Systemen mit individuellen ACLs reichen Rollen nicht: Mandantenkennung und wirksame Berechtigungen bzw. deren Version gehören ebenfalls in den Schlüssel.",
           "language": "python",
           "template": "def cache_key(frage, user_role, index_version):\n    return ({{1}}, user_role, {{2}})",
           "blanks": [
@@ -448,6 +384,70 @@
                 "index_version"
               ]
             }
+          }
+        },
+        {
+          "id": "l14t07s5",
+          "type": "explain",
+          "title": "Indirekte Prompt-Injection",
+          "prompt": "Erkläre kurz.",
+          "xp": 40,
+          "difficulty": 2,
+          "explanation": "Siehe *Prompt-Injection über Dokumente*.",
+          "question": "Was ist indirekte Prompt-Injection in RAG-Systemen, warum lässt sie sich nicht allein durch den System-Prompt verhindern, und welche Gegenmaßnahmen gibt es?",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Anweisung steckt in abgerufenem Dokument, nicht in der Nutzerfrage",
+                "keywords": [
+                  "dokument",
+                  "abgerufen",
+                  "kontext",
+                  "upload",
+                  "indirekt",
+                  "quelle"
+                ]
+              },
+              {
+                "concept": "Modell trennt Daten und Befehle nicht hart",
+                "keywords": [
+                  "trenn",
+                  "gleiche kontext",
+                  "selben kontext",
+                  "daten und befehl",
+                  "keine grenze",
+                  "nicht unterscheiden",
+                  "kontextfenster"
+                ]
+              },
+              {
+                "concept": "Quellen-Vertrauen / Filter / Erkennung",
+                "keywords": [
+                  "vertrau",
+                  "filter",
+                  "erkenn",
+                  "prüf",
+                  "klassifik",
+                  "scan",
+                  "markier"
+                ]
+              },
+              {
+                "concept": "Minimale Rechte / Ausgabeprüfung",
+                "keywords": [
+                  "rechte",
+                  "berechtig",
+                  "bestätig",
+                  "ausgab",
+                  "allowlist",
+                  "least privilege",
+                  "werkzeug",
+                  "tool"
+                ]
+              }
+            ],
+            "model_answer": "Bei **indirekter Prompt-Injection** platziert ein Angreifer Anweisungen in einem Dokument, das später abgerufen wird (z. B. „Ignoriere alle vorherigen Anweisungen …“ im Partner-Handbuch). Das LLM sieht System-Prompt und Dokumenttext im selben Kontextfenster und hat keine harte Grenze zwischen Daten und Befehlen – deshalb reduziert ein guter System-Prompt das Risiko, verhindert es aber nicht.\n\nGegenmaßnahmen in Schichten: Quellen nach Vertrauen markieren und Uploads prüfen, Injection-Muster bei Ingestion und Abfrage erkennen, Kontext im Prompt als Daten kennzeichnen, dem Modell nur minimale Rechte geben (keine folgenreichen Aktionen ohne Bestätigung) und Ausgaben gegen Policies und Allowlists prüfen.",
+            "pass_ratio": 0.6
           }
         }
       ]

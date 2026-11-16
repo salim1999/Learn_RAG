@@ -18,7 +18,7 @@ export async function viewAgents(root, params, { alive }) {
     h('p.lead', 'Ein Team aus Planer, Retriever, Generator und Prüfer beantwortet deine Frage. Schlägt die Prüfung fehl, startet der Orchestrator eine neue Runde.')));
 
   const query = h('input.input', { type: 'text', id: 'ag-query', value: DEFAULT_CONFIG.query, autocomplete: 'off' });
-  const maxIt = h('input.input.input-num', { type: 'number', id: 'ag-max', min: '1', max: '6', value: '3' });
+  const maxIt = h('input.input.input-num', { type: 'number', id: 'ag-max', min: '1', max: '3', value: '3' });
   const forceFail = h('input', { type: 'checkbox', id: 'ag-fail' });
   const useLlm = h('input', { type: 'checkbox', id: 'ag-llm', disabled: !llmOn });
   const startBtn = h('button.btn.btn-primary', { type: 'submit' }, 'Agenten starten');
@@ -81,7 +81,7 @@ export async function viewAgents(root, params, { alive }) {
     const sc = freshScene();
     stop = api.agentsStream({
       query: q,
-      max_iterations: Math.max(1, Math.min(6, Number(maxIt.value) || 3)),
+      max_iterations: Math.max(1, Math.min(3, Number(maxIt.value) || 3)),
       force_fail_first: forceFail.checked,
       use_llm: useLlm.checked && llmOn,
     }, (evt) => {

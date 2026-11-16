@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import copy
+import datetime
+import math
 import os
 from pathlib import Path
 from typing import Any
 
 VERSION = "1.0"
-MODEL = "claude-opus-5-5"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -18,6 +19,7 @@ try:
     load_dotenv(BASE_DIR / ".env", override=False)
 except ImportError:  # pragma: no cover - python-dotenv ist optional
     pass
+MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5").strip() or "claude-opus-5-5"
 APP_DIR = BASE_DIR / "app"
 STATIC_DIR = BASE_DIR / "static"
 CONTENT_DIR = APP_DIR / "content"
@@ -102,7 +104,9 @@ def deep_merge(base: dict, override: dict | None) -> dict:
 def _num(val: Any, default: float, lo: float, hi: float, as_int: bool = False) -> float | int:
     try:
         v = float(val)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        v = float(default)
+    if not math.isfinite(v):
         v = float(default)
     v = max(lo, min(hi, v))
     return int(round(v)) if as_int else v
@@ -114,11 +118,25 @@ def _bool(val: Any) -> bool:
     return bool(val)
 
 
+class PipelineConfigError(ValueError):
+    """Ungültige Eingaben sind Clientfehler, keine Serverfehler."""
+
+
 def normalize_pipeline_config(cfg: dict | None) -> dict:
     """Defaults einsetzen und Werte in sinnvolle Bereiche bringen."""
+    if cfg is not None and not isinstance(cfg, dict):
+        raise PipelineConfigError("Pipeline-Konfiguration muss ein Objekt sein")
+    for section in ("chunking", "retrieval", "freshness", "generation"):
+        if section in (cfg or {}) and not isinstance(cfg[section], dict):
+            raise PipelineConfigError(f"'{section}' muss ein Objekt sein")
+    for name in ("query", "corpus"):
+        if name in (cfg or {}) and not isinstance(cfg[name], str):
+            raise PipelineConfigError(f"'{name}' muss ein Text sein")
     c = deep_merge(DEFAULT_PIPELINE_CONFIG, cfg or {})
     d = DEFAULT_PIPELINE_CONFIG
     c["query"] = str(c.get("query") or "").strip()
+    if len(c["query"]) > 4000:
+        raise PipelineConfigError("Frage darf höchstens 4000 Zeichen lang sein")
     c["corpus"] = str(c.get("corpus") or "default")
 
     ch = c["chunking"]
@@ -142,6 +160,10 @@ def normalize_pipeline_config(cfg: dict | None) -> dict:
     f["half_life_days"] = _num(f.get("half_life_days"), 365, 1, 100000, as_int=True)
     f["drop_superseded"] = _bool(f.get("drop_superseded"))
     f["as_of"] = str(f.get("as_of") or d["freshness"]["as_of"])
+    try:
+        datetime.date.fromisoformat(f["as_of"])
+    except ValueError as exc:
+        raise PipelineConfigError("'freshness.as_of' muss ein gültiges Datum (JJJJ-MM-TT) sein") from exc
 
     g = c["generation"]
     if g.get("mode") not in ("extractive", "llm"):

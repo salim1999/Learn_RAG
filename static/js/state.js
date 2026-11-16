@@ -58,6 +58,9 @@ export function setProgress(p) {
   if (!p) return;
   const prev = state.progress;
   state.progress = p;
+  for (const [id, level] of Object.entries(p.levels || {})) {
+    if (!level.unlocked) levelCache.delete(id);
+  }
   const change = { type: 'progress', newBadges: [], rankUp: null, xpGain: 0 };
   if (prev && prev.player && p.player) {
     const had = new Set((prev.player.badges || []).map((b) => b.id));

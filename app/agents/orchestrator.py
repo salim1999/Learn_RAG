@@ -103,7 +103,7 @@ def _step(agent: str, iteration: int, status: str, message: str, payload: dict |
 def run_agents(query: str, max_iterations: int = 3, force_fail_first: bool = False,
                use_llm: bool = False, corpus_id: str = "default") -> Iterator[dict]:
     query = (query or "").strip()
-    max_iterations = max(1, min(int(max_iterations or 3), 5))
+    max_iterations = max(1, min(int(max_iterations or 3), 3))
     corpus = content_loader.get_corpus(corpus_id)
     yield _step("orchestrator", 1, "start",
                 f"Ich koordiniere vier Agenten für die Frage „{query}“: Planner, Retriever, Generator und "
@@ -148,7 +148,7 @@ def run_agents(query: str, max_iterations: int = 3, force_fail_first: bool = Fal
 
         # --- Retriever -----------------------------------------------------------------
         yield _step("retriever", iteration, "start",
-                    "Ich durchsuche den Korpus hybrid (TF-IDF für Bedeutungsnähe über Wortgewichte + BM25 für "
+                    "Ich durchsuche den Korpus hybrid (TF-IDF für lexikalische Ähnlichkeit über Wortgewichte + BM25 für "
                     "exakte Begriffe) und gewichte neuere Dokumente höher (Recency-Decay)."
                     + (" Ersetzte Dokumente filtere ich diesmal komplett heraus." if drop_superseded else ""))
         chunks, rcfg = _retrieve(bundle, p, drop_superseded, as_of)

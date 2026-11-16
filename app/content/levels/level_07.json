@@ -17,7 +17,7 @@
     },
     {
       "heading": "Claim-Extraktion und NLI",
-      "body_md": "Das robusteste Prüfverfahren zerlegt die Antwort in **atomare Aussagen (Claims)** und prüft jede einzeln gegen den Kontext:\n\n1. **Claim-Extraktion:** „Der Pro-Plan kostet 16,90 € und enthält 2 TB.“ → (a) Pro kostet 16,90 €; (b) Pro enthält 2 TB.\n2. **Natural Language Inference (NLI):** Für jedes Paar (Kontext, Claim) entscheidet ein NLI-Modell oder LLM: **entailment** (gedeckt), **contradiction** (widerspricht) oder **neutral** (nicht belegt).\n3. **Faithfulness-Score** = Anteil gedeckter Claims.\n\n```python\nclaims = extract_claims(antwort)            # LLM oder Regeln\nlabels = [nli(kontext, c) for c in claims]  # entailment/neutral/contradiction\nfaithfulness = labels.count(\"entailment\") / len(claims)\n```\n\n**Fallstrick:** Die Claim-Extraktion selbst kann Fehler machen (Claims weglassen, umformulieren). Und Zahlen-/Datumsabgleich ist für NLI-Modelle schwierig – ergänze ihn regelbasiert.",
+      "body_md": "Ein stärkeres Prüfverfahren zerlegt die Antwort in **atomare Aussagen (Claims)** und prüft jede einzeln gegen den Kontext:\n\n1. **Claim-Extraktion:** „Der Pro-Plan kostet 16,90 € und enthält 2 TB.“ → (a) Pro kostet 16,90 €; (b) Pro enthält 2 TB.\n2. **Natural Language Inference (NLI):** Für jedes Paar (Kontext, Claim) entscheidet ein NLI-Modell oder LLM: **entailment** (gedeckt), **contradiction** (widerspricht) oder **neutral** (nicht belegt).\n3. **Faithfulness-Score** = Anteil gedeckter Claims.\n\n```python\nclaims = extract_claims(antwort)            # LLM oder Regeln\nlabels = [nli(kontext, c) for c in claims]  # entailment/neutral/contradiction\nfaithfulness = labels.count(\"entailment\") / len(claims)\n```\n\n**Fallstrick:** Die Claim-Extraktion selbst kann Fehler machen (Claims weglassen, umformulieren). Und Zahlen-/Datumsabgleich ist für NLI-Modelle schwierig – ergänze ihn regelbasiert.",
       "key_points": [
         "Antwort in atomare Claims zerlegen.",
         "NLI: entailment / neutral / contradiction.",
@@ -148,7 +148,7 @@
       "type": "code",
       "title": "Grounding-Overlap",
       "prompt": "Berechne den Anteil der Wörter eines Satzes, die auch im Chunk vorkommen.",
-      "xp": 30,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Overlap = |Satzwörter ∩ Chunkwörter| / |Satzwörter|. Normiert wird auf den Satz, weil wir wissen wollen, wie viel *des Satzes* belegt ist. Erinnerung: Negationen und Paraphrasen täuschen diese Heuristik.",
       "language": "python",
@@ -260,75 +260,11 @@
       }
     },
     {
-      "id": "l07t06",
-      "type": "explain",
-      "title": "Faithfulness vs. Factuality",
-      "prompt": "Erkläre den Unterschied.",
-      "xp": 40,
-      "difficulty": 2,
-      "explanation": "Siehe *Arten von Halluzinationen*.",
-      "question": "Was ist der Unterschied zwischen Faithfulness und Factuality? Nenne ein NovaCloud-Beispiel, in dem eine Antwort faithful, aber falsch ist.",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Faithfulness = durch den gegebenen Kontext gedeckt",
-            "keywords": [
-              "kontext",
-              "quelle",
-              "gedeckt",
-              "belegt",
-              "treu"
-            ]
-          },
-          {
-            "concept": "Factuality = in der Realität wahr/korrekt",
-            "keywords": [
-              "realität",
-              "wirklich",
-              "wahr",
-              "korrekt",
-              "welt",
-              "tatsäch"
-            ]
-          },
-          {
-            "concept": "Beispiel mit veraltetem Kontext",
-            "keywords": [
-              "veraltet",
-              "alt",
-              "2022",
-              "2023",
-              "2024",
-              "superseded",
-              "ersetzt",
-              "90 tage",
-              "9,90",
-              "12,90",
-              "14,90"
-            ]
-          },
-          {
-            "concept": "Konsequenz: Quellenqualität/Freshness sichern",
-            "keywords": [
-              "aktuell",
-              "freshness",
-              "version",
-              "filter",
-              "quellenqualität",
-              "neueste"
-            ]
-          }
-        ],
-        "model_answer": "**Faithfulness** misst, ob die Antwort durch den *bereitgestellten Kontext* gedeckt ist. **Factuality** misst, ob sie *in der Welt* wahr ist.\n\nBeispiel: Im Kontext steht nur das Preisblatt 2024 („Pro-Plan: 14,90 €“). Antwortet der Bot „Der Pro-Plan kostet 14,90 €“, ist das perfekt faithful – aber falsch, denn seit März 2026 kostet er 16,90 €. Deshalb reicht Faithfulness-Prüfung allein nicht: Man muss zusätzlich sicherstellen, dass aktuelle, gültige Quellen im Kontext landen (Freshness, Versionierung).",
-        "pass_ratio": 0.6
-      }
-    },
-    {
       "id": "l07t07",
       "type": "boss",
       "title": "Boss: Die Hydra der Halluzinationen",
       "prompt": "Schlägst du einen Kopf ab, wachsen zwei nach – außer du prüfst systematisch.",
-      "xp": 110,
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Die Hydra ist besiegt: Du erkennst intrinsische und extrinsische Halluzinationen und weißt, welche Prüfung wann taugt.",
       "visual": "hallucination",
@@ -432,6 +368,70 @@
           "solution": {
             "correct": "b",
             "why": "**B** ist meist der bessere Kompromiss: Die billigen Checks fangen viele Fehler (z. B. Zahlen, die im Kontext nicht vorkommen), und das teure NLI wird dort eingesetzt, wo Fehler am meisten kosten. *Trade-off:* Fehler, die die Vorfilter nicht als verdächtig markieren (wie „angestrebt“ vs. „garantiert“), rutschen durch – deshalb Hochrisiko-Themen grundsätzlich voll prüfen und Stichproben auswerten. In stark regulierten Bereichen kann A gerechtfertigt sein."
+          }
+        },
+        {
+          "id": "l07t07s4",
+          "type": "explain",
+          "title": "Faithfulness vs. Factuality",
+          "prompt": "Erkläre den Unterschied.",
+          "xp": 40,
+          "difficulty": 2,
+          "explanation": "Siehe *Arten von Halluzinationen*.",
+          "question": "Was ist der Unterschied zwischen Faithfulness und Factuality? Nenne ein NovaCloud-Beispiel, in dem eine Antwort faithful, aber falsch ist.",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Faithfulness = durch den gegebenen Kontext gedeckt",
+                "keywords": [
+                  "kontext",
+                  "quelle",
+                  "gedeckt",
+                  "belegt",
+                  "treu"
+                ]
+              },
+              {
+                "concept": "Factuality = in der Realität wahr/korrekt",
+                "keywords": [
+                  "realität",
+                  "wirklich",
+                  "wahr",
+                  "korrekt",
+                  "welt",
+                  "tatsäch"
+                ]
+              },
+              {
+                "concept": "Beispiel mit veraltetem Kontext",
+                "keywords": [
+                  "veraltet",
+                  "alt",
+                  "2022",
+                  "2023",
+                  "2024",
+                  "superseded",
+                  "ersetzt",
+                  "90 tage",
+                  "9,90",
+                  "12,90",
+                  "14,90"
+                ]
+              },
+              {
+                "concept": "Konsequenz: Quellenqualität/Freshness sichern",
+                "keywords": [
+                  "aktuell",
+                  "freshness",
+                  "version",
+                  "filter",
+                  "quellenqualität",
+                  "neueste"
+                ]
+              }
+            ],
+            "model_answer": "**Faithfulness** misst, ob die Antwort durch den *bereitgestellten Kontext* gedeckt ist. **Factuality** misst, ob sie *in der Welt* wahr ist.\n\nBeispiel: Im Kontext steht nur das Preisblatt 2024 („Pro-Plan: 14,90 €“). Antwortet der Bot „Der Pro-Plan kostet 14,90 €“, ist das perfekt faithful – aber falsch, denn seit März 2026 kostet er 16,90 €. Deshalb reicht Faithfulness-Prüfung allein nicht: Man muss zusätzlich sicherstellen, dass aktuelle, gültige Quellen im Kontext landen (Freshness, Versionierung).",
+            "pass_ratio": 0.6
           }
         }
       ]

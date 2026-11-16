@@ -17,7 +17,7 @@
     },
     {
       "heading": "Granularität und Qualitätsmaße",
-      "body_md": "**Granularität:** Dokument („laut Preisblatt 2026“) < Chunk (`[d04#1]`) < Satz/Span (exakter Textausschnitt). Feiner ist prüfbarer, aber aufwendiger.\n\n**Citation Precision:** Anteil der Zitate, die die zugehörige Aussage tatsächlich stützen.\n**Citation Recall:** Anteil der Aussagen, die mindestens ein stützendes Zitat haben.\n\n```python\ndef citation_precision(paare, stuetzt):\n    # paare: [(satz, chunk_id), ...]\n    ok = sum(1 for s, cid in paare if stuetzt(s, cid))\n    return ok / len(paare) if paare else 0.0\n```\n\nTypisches Bild: hoher Recall (überall Zitate), niedrige Precision (viele zeigen ins Leere). Beide Werte gehören ins Monitoring.",
+      "body_md": "**Granularität:** Dokument („laut Preisblatt 2026“) < Chunk (`[d04#1]`) < Satz/Span (exakter Textausschnitt). Feiner ist prüfbarer, aber aufwendiger.\n\n**Citation Precision:** Anteil der Zitate, die die zugehörige Aussage tatsächlich stützen.\n**Citation Recall:** Anteil der Aussagen, die mindestens ein stützendes Zitat haben.\n\n```python\ndef citation_precision(paare, stuetzt):\n    # paare: [(satz, chunk_id), ...]\n    ok = sum(1 for s, cid in paare if stuetzt(s, cid))\n    return ok / len(paare) if paare else 0.0\n```\n\nÜberall sichtbare Zitate ergeben zunächst nur eine hohe **Zitierabdeckung**, nicht automatisch hohen Citation Recall: Für Recall muss ein Zitat die Aussage auch stützen. Hoher Recall und niedrige Precision sind möglich, wenn jeder Claim mindestens ein gutes Zitat hat, daneben aber zusätzliche unpassende Zitate stehen. Beide Werte gehören ins Monitoring.",
       "key_points": [
         "Dokument-, Chunk- oder Span-Zitate.",
         "Precision: Stützt das Zitat die Aussage?",
@@ -143,7 +143,7 @@
       "type": "better",
       "title": "Inline oder Post-hoc?",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *Inline vs. Post-hoc-Attribution*.",
       "scenario": "Ein Rechtsabteilungs-Bot soll Fragen zur DSGVO-Richtlinie beantworten. Jede Aussage muss nachweislich belegt sein.",
@@ -158,52 +158,6 @@
       "solution": {
         "correct": "b",
         "why": "**B**: Bei Belegpflicht reicht ein vom Modell gesetztes Zitat nicht – Fehlattribution ist häufig. Die Post-hoc-Prüfung macht aus „behauptet belegt“ ein „geprüft belegt“.\n\n*Trade-off:* Zusätzliche Latenz und Kosten pro Antwort, und der NLI-Prüfer kann selbst irren (z. B. bei Paraphrasen ungestützte markieren). Für einen Freizeit-Chatbot wäre A vertretbar; für Recht und Compliance nicht."
-      }
-    },
-    {
-      "id": "l08t04",
-      "type": "spot",
-      "title": "Erfundene Quelle",
-      "prompt": "Frage: *„Wie lange sind OAuth-Token gültig?“* Kontext-IDs: `d23#1` und `d23#2`. Markiere fehlerhafte Sätze.",
-      "xp": 25,
-      "difficulty": 2,
-      "explanation": "Ein Zitat auf eine ID außerhalb des Kontexts ist immer ein harter Fehler. Siehe *Zitate validieren*.",
-      "visual": "hallucination",
-      "context": [
-        {
-          "id": "d23#1",
-          "text": "(API-Authentifizierung) API-Schlüssel beginnen mit dem Präfix nc_live_ für Produktivumgebungen und nc_test_ für die Testumgebung. Sie laufen nach 365 Tagen automatisch ab."
-        },
-        {
-          "id": "d23#2",
-          "text": "(API-Authentifizierung) OAuth-Zugriffstoken sind 60 Minuten gültig, Refresh-Token 30 Tage."
-        }
-      ],
-      "answer_sentences": [
-        {
-          "id": "s1",
-          "text": "OAuth-Zugriffstoken sind 60 Minuten gültig. [d23#2]"
-        },
-        {
-          "id": "s2",
-          "text": "Refresh-Token sind 30 Tage gültig. [d23#2]"
-        },
-        {
-          "id": "s3",
-          "text": "Nach Ablauf muss man sich per 2FA neu anmelden. [d14#3]"
-        },
-        {
-          "id": "s4",
-          "text": "API-Schlüssel laufen nach 365 Tagen ab. [d23#1]"
-        }
-      ],
-      "solution": {
-        "hallucinated": [
-          "s3"
-        ],
-        "notes": {
-          "s3": "d14#3 ist gar nicht im Kontext – erfundene bzw. nicht abgerufene Quelle, und die Aussage ist unbelegt."
-        }
       }
     },
     {
@@ -246,7 +200,7 @@
       "type": "code",
       "title": "Ungültige Zitate finden",
       "prompt": "Gib alle zitierten IDs zurück, die nicht im Kontext vorkommen.",
-      "xp": 25,
+      "xp": 50,
       "difficulty": 1,
       "explanation": "Jede ID, die nicht im erlaubten Set liegt, ist ein erfundenes Zitat.",
       "language": "python",
@@ -273,7 +227,7 @@
       "type": "boss",
       "title": "Boss: Der Quellenfälscher",
       "prompt": "Ein Fälscher schmuggelt falsche Belege in deine Antworten.",
-      "xp": 100,
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Der Fälscher ist entlarvt: Zitate werden jetzt geprüft, nicht geglaubt.",
       "visual": "hallucination",
@@ -326,7 +280,7 @@
           "id": "l08t07s2",
           "type": "quiz",
           "title": "Welche Metrik ist gesunken?",
-          "prompt": "Fast jeder Satz hat ein Zitat, aber viele Zitate tragen die Aussage nicht. Welche Metrik ist niedrig?",
+          "prompt": "Fast jeder Satz hat ein Zitat, aber viele dieser Zitate tragen die Aussage nicht. Welche Metrik ist damit sicher niedrig?",
           "xp": 20,
           "difficulty": 1,
           "explanation": "Siehe *Granularität und Qualitätsmaße*.",
@@ -354,8 +308,8 @@
               "b"
             ],
             "option_explanations": {
-              "a": "Recall ist hoch – fast jeder Satz ist zitiert.",
-              "b": "Richtig.",
+              "a": "Sichtbare Zitate zeigen nur die Zitierabdeckung. Für Citation Recall müssen sie die Claims tatsächlich stützen; aus den Angaben lässt sich sein Wert nicht bestimmen.",
+              "b": "Richtig: Nicht stützende Zitate senken die Citation Precision, unabhängig von der bloßen Zitierabdeckung.",
               "c": "Retrieval-Metrik, nicht Attribution.",
               "d": "Retrieval-Metrik."
             }
@@ -381,6 +335,52 @@
           "solution": {
             "correct": "a",
             "why": "**A** behebt das Problem strukturell: Die Zuordnung erfolgt messbar, und ungestützte Sätze fallen auf. Embedding-Ähnlichkeit ist schnell (Vektoren liegen ohnehin vor). *Trade-off:* Ähnlichkeit ist nicht Stützung – Widersprüche mit gleichem Vokabular werden nicht erkannt; für Hochrisiko-Antworten zusätzlich NLI. B kann etwas helfen, ist aber nicht überprüfbar."
+          }
+        },
+        {
+          "id": "l08t07s4",
+          "type": "spot",
+          "title": "Erfundene Quelle",
+          "prompt": "Frage: *„Wie lange sind OAuth-Token gültig?“* Kontext-IDs: `d23#1` und `d23#2`. Markiere fehlerhafte Sätze.",
+          "xp": 25,
+          "difficulty": 2,
+          "explanation": "Ein Zitat auf eine ID außerhalb des Kontexts ist immer ein harter Fehler. Siehe *Zitate validieren*.",
+          "visual": "hallucination",
+          "context": [
+            {
+              "id": "d23#1",
+              "text": "(API-Authentifizierung) API-Schlüssel beginnen mit dem Präfix nc_live_ für Produktivumgebungen und nc_test_ für die Testumgebung. Sie laufen nach 365 Tagen automatisch ab."
+            },
+            {
+              "id": "d23#2",
+              "text": "(API-Authentifizierung) OAuth-Zugriffstoken sind 60 Minuten gültig, Refresh-Token 30 Tage."
+            }
+          ],
+          "answer_sentences": [
+            {
+              "id": "s1",
+              "text": "OAuth-Zugriffstoken sind 60 Minuten gültig. [d23#2]"
+            },
+            {
+              "id": "s2",
+              "text": "Refresh-Token sind 30 Tage gültig. [d23#2]"
+            },
+            {
+              "id": "s3",
+              "text": "Nach Ablauf muss man sich per 2FA neu anmelden. [d14#3]"
+            },
+            {
+              "id": "s4",
+              "text": "API-Schlüssel laufen nach 365 Tagen ab. [d23#1]"
+            }
+          ],
+          "solution": {
+            "hallucinated": [
+              "s3"
+            ],
+            "notes": {
+              "s3": "d14#3 ist gar nicht im Kontext – erfundene bzw. nicht abgerufene Quelle, und die Aussage ist unbelegt."
+            }
           }
         }
       ]

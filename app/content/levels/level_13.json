@@ -27,7 +27,7 @@
     },
     {
       "heading": "Text-to-SQL und strukturierte Daten",
-      "body_md": "Liegen Fakten ohnehin strukturiert vor (Nutzungsdaten, Tickets, Rechnungen), ist **SQL** die richtige Quelle. Ein LLM übersetzt die Frage in eine Abfrage:\n\n```python\nsql = llm(f\"Schema:\\n{schema}\\nFrage: {frage}\\nGib nur eine SELECT-Abfrage zurück.\")\nif not sql.strip().lower().startswith(\"select\"):\n    raise ValueError(\"Nur lesende Abfragen erlaubt\")\nrows = db.execute(sql, timeout=5)        # mit Read-only-Benutzer!\nantwort = llm(f\"Frage: {frage}\\nErgebnis: {rows}\\nAntworte knapp.\")\n```\n\nSicherheits- und Qualitätsregeln:\n- **Read-only-Datenbanknutzer** – die Prüfung auf „SELECT“ allein genügt nicht.\n- **Zeilen-/Mandantenfilter** serverseitig erzwingen (ein Kunde sieht nur eigene Daten).\n- **Schema mit Beschreibungen** und Beispielabfragen mitgeben.\n- **Ergebnis prüfen:** leere Ergebnisse, absurde Werte, Timeouts.\n- Die Abfrage für Nutzer **sichtbar** machen – das ist die „Quelle“ der Antwort.",
+      "body_md": "Liegen Fakten ohnehin strukturiert vor (Nutzungsdaten, Tickets, Rechnungen), ist **SQL** die richtige Quelle. Ein LLM übersetzt die Frage in eine Abfrage:\n\n```python\nsql = llm(f\"Schema:\\n{schema}\\nFrage: {frage}\\nGib nur eine SELECT-Abfrage zurück.\")\n# Pseudocode: SQL-Dialektparser und serverseitige Policy nötig.\nast = parse_exactly_one_statement(sql)\nvalidate_read_only_select(ast, allowed_tables, allowed_functions)\nrows = read_only_db.execute(\n    ast, tenant_id=current_tenant, timeout=5, max_rows=100\n)\nantwort = llm(f\"Frage: {frage}\\nErgebnis: {rows}\\nAntworte knapp.\")\n```\n\nSicherheits- und Qualitätsregeln:\n- **Read-only-Datenbanknutzer** mit minimalen Tabellen-/Funktionsrechten. Zusätzlich genau ein Statement parsen und verbotene Operationen, Funktionen und Mehrfachstatements serverseitig ablehnen. Die Prüfung auf „SELECT“ allein genügt nicht.\n- **Zeilen-/Mandantenfilter** serverseitig erzwingen (ein Kunde sieht nur eigene Daten).\n- **Schema mit Beschreibungen** und Beispielabfragen mitgeben.\n- **Ergebnis prüfen:** leere Ergebnisse, absurde Werte, Timeouts.\n- Die Abfrage für Nutzer **sichtbar** machen – das ist die „Quelle“ der Antwort.",
       "key_points": [
         "SQL für Zahlen, Filter, Aggregation.",
         "Read-only + Mandantenfilter serverseitig.",
@@ -91,7 +91,7 @@
       "type": "better",
       "title": "Zählen mit Vektoren?",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *Text-to-SQL und strukturierte Daten*.",
       "scenario": "Das Management fragt: *„Wie viele P1-Tickets gab es 2025 pro Monat?“* Die Tickets liegen in einer Datenbank; zusätzlich wurde ein CSV-Export in den Vektorindex geladen.",
@@ -113,7 +113,7 @@
       "type": "better",
       "title": "Überblicksfrage",
       "prompt": "Was wäre besser?",
-      "xp": 35,
+      "xp": 40,
       "difficulty": 3,
       "explanation": "Siehe *Knowledge Graphs und GraphRAG*.",
       "scenario": "Frage: *„Was sind die wiederkehrenden Ursachen in allen 120 Störungsberichten der letzten drei Jahre?“*",
@@ -175,7 +175,7 @@
       "type": "code",
       "title": "Einfacher Router",
       "prompt": "Vervollständige einen regelbasierten Router: Aggregationsfragen gehen an SQL, alles andere an die Dokumentsuche.",
-      "xp": 30,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "`any(...)` prüft, ob eines der Schlüsselwörter vorkommt. Regelbasiertes Routing ist schnell und erklärbar, aber grob – „Wie viele Tokens enthält der Pro-Plan?“ würde fälschlich an SQL gehen. Darum ergänzt man oft einen LLM- oder Klassifikator-Router.",
       "language": "python",
@@ -197,75 +197,11 @@
       }
     },
     {
-      "id": "l13t06",
-      "type": "explain",
-      "title": "Wann Graph, wann SQL, wann Vektor?",
-      "prompt": "Erkläre kurz.",
-      "xp": 40,
-      "difficulty": 2,
-      "explanation": "Siehe *Routing: das richtige Werkzeug pro Frage*.",
-      "question": "Wann würdest du Vektorsuche, SQL bzw. einen Knowledge Graph einsetzen? Nenne je einen typischen Fragetyp.",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Vektor für inhaltliche Textfragen / Ähnlichkeit",
-            "keywords": [
-              "vektor",
-              "ähnlich",
-              "embedding",
-              "dokument",
-              "textstelle",
-              "semantisch"
-            ]
-          },
-          {
-            "concept": "SQL für Aggregation, Zählen, exakte Filter",
-            "keywords": [
-              "sql",
-              "zähl",
-              "anzahl",
-              "summe",
-              "aggreg",
-              "wie viele",
-              "filter",
-              "durchschnitt"
-            ]
-          },
-          {
-            "concept": "Graph für Beziehungen / Multi-Hop",
-            "keywords": [
-              "graph",
-              "beziehung",
-              "multi-hop",
-              "zusammenhang",
-              "entität",
-              "verbindung",
-              "relation"
-            ]
-          },
-          {
-            "concept": "Globale Überblicksfragen über viele Dokumente",
-            "keywords": [
-              "global",
-              "überblick",
-              "hauptthemen",
-              "community",
-              "muster",
-              "alle dokumente",
-              "zusammenfass"
-            ]
-          }
-        ],
-        "model_answer": "- **Vektorsuche:** Fragen, deren Antwort in einer Textstelle steht – „Was steht in der Richtlinie zur Papierkorb-Frist?“\n- **SQL:** Zahlen, Filter und Aggregation über strukturierte Daten – „Wie viele Business-Kunden nutzen mehr als 4 TB?“\n- **Knowledge Graph (lokal):** Beziehungen und Multi-Hop – „Welche Dokumente verantwortet die CTO?“\n- **GraphRAG (global) / Zusammenfassungen:** Überblicksfragen über viele Dokumente – „Was sind die wiederkehrenden Störungsursachen?“\n\nEin Router entscheidet pro Frage; bei Mischfragen werden Quellen kombiniert.",
-        "pass_ratio": 0.6
-      }
-    },
-    {
       "id": "l13t07",
       "type": "boss",
       "title": "Boss: Die Datenchimäre",
       "prompt": "Halb Tabelle, halb Text, halb Graph – die Chimäre verwirrt jeden Retriever.",
-      "xp": 100,
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Die Chimäre ist gezähmt: Jede Frage bekommt die passende Quelle.",
       "story": "Der NovaCloud-Vertrieb will einen Assistenten, der Dokumente, Nutzungsdaten und Organisationswissen kombiniert. Die Chimäre verlangt, dass du für jede Frage die richtige Waffe wählst.",
@@ -313,13 +249,13 @@
         {
           "id": "l13t07s2",
           "type": "code",
-          "title": "SQL-Wächter",
-          "prompt": "Lass nur Abfragen durch, die mit SELECT beginnen (Groß-/Kleinschreibung egal, führende Leerzeichen ignorieren).",
+          "title": "SQL-Präfix erkennen",
+          "prompt": "Übe ausschließlich String-Normalisierung: Prüfe, ob der Text mit SELECT beginnt (Groß-/Kleinschreibung egal, führende Leerzeichen ignorieren). **Dieser Vorfilter beweist nicht, dass eine SQL-Abfrage sicher ist.**",
           "xp": 20,
           "difficulty": 2,
-          "explanation": "Achtung: Das ist nur ein Vorfilter (`SELECT …; DROP TABLE …` beginnt auch mit SELECT). Die eigentliche Sicherheit liefert ein Read-only-Datenbanknutzer.",
+          "explanation": "Der Präfix-Check akzeptiert auch `SELECT …; DROP TABLE …` und ist keine Sicherheitsgrenze. Produktiv: SQL parsen, genau ein erlaubtes lesendes Statement und erlaubte Tabellen/Funktionen prüfen, Mandantenrechte erzwingen, nur mit minimal berechtigtem Read-only-Konto ausführen und Zeit-/Zeilenlimits setzen.",
           "language": "python",
-          "template": "def is_safe_select(sql):\n    return {{1}}",
+          "template": "def has_select_prefix(sql):\n    return {{1}}",
           "blanks": [
             {
               "id": "1",
@@ -359,6 +295,70 @@
           "solution": {
             "correct": "b",
             "why": "**B**: Vektorsuche kann über 2 Mio. Zeilen weder zählen noch filtern; der Index wird riesig und verrauscht andere Treffer. *Trade-off:* Zwei Systeme bedeuten mehr Betriebsaufwand und eine Routing-Fehlerquelle. Sinnvoll eingebettet werden können dagegen **Beschreibungen** der Tabellen (Schema-Doku), damit der Router und das Text-to-SQL-Modell sie finden."
+          }
+        },
+        {
+          "id": "l13t07s4",
+          "type": "explain",
+          "title": "Wann Graph, wann SQL, wann Vektor?",
+          "prompt": "Erkläre kurz.",
+          "xp": 40,
+          "difficulty": 2,
+          "explanation": "Siehe *Routing: das richtige Werkzeug pro Frage*.",
+          "question": "Wann würdest du Vektorsuche, SQL bzw. einen Knowledge Graph einsetzen? Nenne je einen typischen Fragetyp.",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Vektor für inhaltliche Textfragen / Ähnlichkeit",
+                "keywords": [
+                  "vektor",
+                  "ähnlich",
+                  "embedding",
+                  "dokument",
+                  "textstelle",
+                  "semantisch"
+                ]
+              },
+              {
+                "concept": "SQL für Aggregation, Zählen, exakte Filter",
+                "keywords": [
+                  "sql",
+                  "zähl",
+                  "anzahl",
+                  "summe",
+                  "aggreg",
+                  "wie viele",
+                  "filter",
+                  "durchschnitt"
+                ]
+              },
+              {
+                "concept": "Graph für Beziehungen / Multi-Hop",
+                "keywords": [
+                  "graph",
+                  "beziehung",
+                  "multi-hop",
+                  "zusammenhang",
+                  "entität",
+                  "verbindung",
+                  "relation"
+                ]
+              },
+              {
+                "concept": "Globale Überblicksfragen über viele Dokumente",
+                "keywords": [
+                  "global",
+                  "überblick",
+                  "hauptthemen",
+                  "community",
+                  "muster",
+                  "alle dokumente",
+                  "zusammenfass"
+                ]
+              }
+            ],
+            "model_answer": "- **Vektorsuche:** Fragen, deren Antwort in einer Textstelle steht – „Was steht in der Richtlinie zur Papierkorb-Frist?“\n- **SQL:** Zahlen, Filter und Aggregation über strukturierte Daten – „Wie viele Business-Kunden nutzen mehr als 4 TB?“\n- **Knowledge Graph (lokal):** Beziehungen und Multi-Hop – „Welche Dokumente verantwortet die CTO?“\n- **GraphRAG (global) / Zusammenfassungen:** Überblicksfragen über viele Dokumente – „Was sind die wiederkehrenden Störungsursachen?“\n\nEin Router entscheidet pro Frage; bei Mischfragen werden Quellen kombiniert.",
+            "pass_ratio": 0.6
           }
         }
       ]

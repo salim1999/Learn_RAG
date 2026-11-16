@@ -2,7 +2,7 @@
 
 import { api } from './api.js';
 import { h, clear, loadingBlock, errorBlock, toast } from './ui.js';
-import { state, setProgress, loadProgress } from './state.js';
+import { state, setProgress, loadProgress, clearLevelCache } from './state.js';
 
 const ROW = 128;
 
@@ -113,6 +113,8 @@ export async function viewMap(root, params, { alive }) {
       if (!window.confirm('Gesamten Fortschritt (XP, Sterne, Abzeichen) zurücksetzen?')) return;
       try {
         const p = await api.reset();
+        clearLevelCache();
+        if (!alive()) return;
         if (p && p.player) setProgress(p); else await loadProgress();
         toast('Fortschritt zurückgesetzt.', 'info');
         viewMap(clear(root), params, { alive });

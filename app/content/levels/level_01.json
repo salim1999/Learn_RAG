@@ -7,7 +7,7 @@
   "theory": [
     {
       "heading": "Warum Sprachmodelle halluzinieren",
-      "body_md": "Ein großes Sprachmodell (LLM) ist im Kern ein **Wahrscheinlichkeitsmodell für das nächste Token**. Es wurde darauf trainiert, plausible Fortsetzungen zu erzeugen – nicht darauf, *wahre* Aussagen zu machen. Wenn das Modell eine Antwort nicht sicher „weiß“, erzeugt es trotzdem den flüssigsten Text. Das nennt man **Halluzination**: eine überzeugend formulierte, aber nicht belegte oder falsche Aussage.\n\nTypische Ursachen:\n\n- **Wissenslücken**: Das Wissen war nie in den Trainingsdaten (z. B. interne Firmendokumente von NovaCloud).\n- **Veraltetes Wissen**: Das Training endete an einem *Knowledge Cutoff*. Preise, Limits oder Richtlinien, die sich danach geändert haben, kennt das Modell nicht.\n- **Seltene Fakten**: Zahlen, Namen und Daten, die selten vorkamen, sind im Modell nur unscharf gespeichert („Long-Tail-Wissen“).\n- **Druck zur Antwort**: Ohne ausdrückliche Erlaubnis, „Ich weiß es nicht“ zu sagen, füllt das Modell Lücken mit Plausiblem.\n- **Fehlerhafte oder widersprüchliche Quellen**: Auch korrekt abgerufener Kontext kann falsch, veraltet oder manipuliert sein.\n\n> **Merksatz:** Ein LLM ist ein brillanter Formulierer, aber kein zuverlässiges Nachschlagewerk.\n\n**Typischer Fehler:** Halluzinationen nur mit einem „besseren Modell“ bekämpfen zu wollen. Größere Modelle halluzinieren seltener, aber nie null – besonders bei Fakten, die sie nicht kennen können.",
+      "body_md": "Ein großes Sprachmodell (LLM) ist im Kern ein **Wahrscheinlichkeitsmodell für das nächste Token**. Es wurde darauf trainiert, plausible Fortsetzungen zu erzeugen – nicht darauf, *wahre* Aussagen zu machen. Wenn das Modell eine Antwort nicht sicher „weiß“, erzeugt es trotzdem den flüssigsten Text. Das nennt man **Halluzination**: eine überzeugend formulierte, aber nicht belegte oder falsche Aussage.\n\nTypische Ursachen:\n\n- **Wissenslücken**: Das Wissen war nie in den Trainingsdaten (z. B. interne Firmendokumente von NovaCloud).\n- **Veraltetes Wissen**: Das Training endete an einem *Knowledge Cutoff*. Preise, Limits oder Richtlinien, die sich danach geändert haben, kennt das Modell nicht.\n- **Seltene Fakten**: Zahlen, Namen und Daten, die selten vorkamen, sind im Modell nur unscharf gespeichert („Long-Tail-Wissen“).\n- **Druck zur Antwort**: Ohne ausdrückliche Erlaubnis, „Ich weiß es nicht“ zu sagen, füllt das Modell Lücken mit Plausiblem.\n- **Fehlerhafte oder widersprüchliche Quellen**: Auch korrekt abgerufener Kontext kann falsch, veraltet oder manipuliert sein.\n\n> **Merksatz:** Ein LLM ist ein brillanter Formulierer, aber kein zuverlässiges Nachschlagewerk.\n\n**Typischer Fehler:** Halluzinationen nur mit einem „besseren Modell“ bekämpfen zu wollen. Größere Modelle können Halluzinationen reduzieren, garantieren aber keine fehlerfreien Antworten – besonders bei Fakten, die sie nicht kennen können.",
       "key_points": [
         "LLMs optimieren Plausibilität, nicht Wahrheit.",
         "Knowledge Cutoff und fehlendes Domänenwissen sind Hauptursachen.",
@@ -17,7 +17,7 @@
     },
     {
       "heading": "Parametrisches vs. nicht-parametrisches Wissen",
-      "body_md": "**Parametrisches Wissen** steckt in den Gewichten (Parametern) des Modells. Es wurde beim Training „eingebrannt“, ist schnell abrufbar, aber:\n\n- nicht ohne Neutraining aktualisierbar,\n- nicht zitierbar (das Modell weiß nicht, *woher* es etwas weiß),\n- nicht nach Nutzerrechten filterbar.\n\n**Nicht-parametrisches Wissen** liegt außerhalb des Modells – in Dokumenten, Datenbanken oder einem Suchindex. Es wird **zur Laufzeit** abgerufen und dem Modell als Kontext mitgegeben. Vorteile:\n\n- jederzeit aktualisierbar (neues Preisblatt hochladen genügt),\n- mit Quelle, Datum und Version versehen → **zitierbar und prüfbar**,\n- per Zugriffsrechten filterbar.\n\n**Retrieval-Augmented Generation (RAG)** kombiniert beides: Das Modell bringt Sprachverständnis und Allgemeinwissen mit (parametrisch), die Fakten kommen aus abgerufenen Dokumenten (nicht-parametrisch).\n\n| | parametrisch | nicht-parametrisch |\n|---|---|---|\n| Aktualisierung | Training/Fine-Tuning | Index aktualisieren |\n| Quellenangabe | nein | ja |\n| Kosten pro Änderung | hoch | gering |\n\n> **Merksatz:** Fakten gehören in den Index, Fähigkeiten in die Gewichte.",
+      "body_md": "**Parametrisches Wissen** steckt in den Gewichten (Parametern) des Modells. Es wurde beim Training „eingebrannt“, ist schnell abrufbar, aber:\n\n- nur durch Änderungen an den Gewichten aktualisierbar, etwa weiteres Training oder Fine-Tuning; eine einzelne Korrektur ist dabei nicht garantiert,\n- nicht verlässlich einem einzelnen Originalbeleg zuzuordnen; erzeugte Quellenangaben müssen separat geprüft werden,\n- nicht nach Nutzerrechten filterbar.\n\n**Nicht-parametrisches Wissen** liegt außerhalb des Modells – in Dokumenten, Datenbanken oder einem Suchindex. Es wird **zur Laufzeit** abgerufen und dem Modell als Kontext mitgegeben. Vorteile:\n\n- gezielt aktualisierbar (neues Preisblatt laden, den Index aktualisieren und abhängige Caches invalidieren),\n- mit Quelle, Datum und Version versehen → **zitierbar und prüfbar**,\n- per Zugriffsrechten filterbar.\n\n**Retrieval-Augmented Generation (RAG)** kombiniert beides: Das Modell bringt Sprachverständnis und Allgemeinwissen mit (parametrisch), die Fakten kommen aus abgerufenen Dokumenten (nicht-parametrisch).\n\n| | parametrisch | nicht-parametrisch |\n|---|---|---|\n| Aktualisierung | Training/Fine-Tuning | Index aktualisieren |\n| Quellenangabe | nicht automatisch verlässlich | über gespeicherte Quellen prüfbar |\n| Kosten pro Änderung | hoch | gering |\n\n> **Merksatz:** Fakten gehören in den Index, Fähigkeiten in die Gewichte.",
       "key_points": [
         "Parametrisch = in den Gewichten, nicht zitierbar, schwer aktualisierbar.",
         "Nicht-parametrisch = externe Quellen, zur Laufzeit abgerufen.",
@@ -185,7 +185,7 @@
       "type": "better",
       "title": "Fine-Tuning oder RAG für Preise?",
       "prompt": "Was wäre besser?",
-      "xp": 25,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Fakten gehören in den Index, Verhalten in die Gewichte. Siehe *Wann RAG – und wann nicht?*",
       "scenario": "NovaCloud hat seit 2022 **vier Preisblätter** veröffentlicht; der Pro-Plan kostete nacheinander 9,90 €, 12,90 €, 14,90 € und jetzt 16,90 €. Der Support-Chatbot soll Preisfragen korrekt und mit Quelle beantworten. Preise ändern sich etwa einmal pro Jahr.",
@@ -199,7 +199,7 @@
       },
       "solution": {
         "correct": "b",
-        "why": "**RAG ist hier klar besser.** Preise sind sich ändernde Fakten mit Belegpflicht. Ein fine-getuntes Modell hat alle vier Preise „gesehen“ und kann sie vermischen; es kann keine Quelle nennen, und jedes Update erfordert neues Training. RAG aktualisiert man durch Austausch eines Dokuments, und über Datum/Version lässt sich die gültige Fassung auswählen.\n\n*Trade-off:* RAG braucht eine saubere Versionierung im Index – sonst landet auch dort das alte Preisblatt im Kontext (→ Level 9). Fine-Tuning wäre sinnvoll, wenn der Bot z. B. einen bestimmten Tonfall lernen soll."
+        "why": "**RAG ist hier klar besser.** Preise sind sich ändernde Fakten mit Belegpflicht. Ein fine-getuntes Modell hat alle vier Preise „gesehen“ und kann sie vermischen; es liefert keine verlässlich prüfbare Herkunft pro Aussage, und jedes Update erfordert neues Training. RAG aktualisiert man durch Austausch eines Dokuments, und über Datum/Version lässt sich die gültige Fassung auswählen.\n\n*Trade-off:* RAG braucht eine saubere Versionierung im Index – sonst landet auch dort das alte Preisblatt im Kontext (→ Level 9). Fine-Tuning wäre sinnvoll, wenn der Bot z. B. einen bestimmten Tonfall lernen soll."
       }
     },
     {
@@ -248,65 +248,147 @@
     },
     {
       "id": "l01t06",
-      "type": "explain",
-      "title": "Erkläre den Unterschied",
-      "prompt": "Erkläre in eigenen Worten.",
-      "xp": 30,
-      "difficulty": 2,
-      "explanation": "Gute Antworten nennen Gewichte vs. externe Quellen, Aktualität und Belegbarkeit.",
-      "question": "Was ist der Unterschied zwischen parametrischem und nicht-parametrischem Wissen, und warum reduziert RAG Halluzinationen?",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Parametrisches Wissen steckt in den Modellgewichten",
-            "keywords": [
-              "gewicht",
-              "parameter",
-              "training",
-              "trainiert",
-              "eingebrannt",
-              "im modell"
-            ]
-          },
-          {
-            "concept": "Nicht-parametrisches Wissen kommt aus externen Quellen zur Laufzeit",
-            "keywords": [
-              "extern",
-              "dokument",
-              "datenbank",
-              "index",
-              "laufzeit",
-              "abgerufen",
-              "abrufen",
-              "retrieval"
-            ]
-          },
-          {
-            "concept": "Aktualisierbarkeit / Aktualität",
-            "keywords": [
-              "aktuali",
-              "veraltet",
-              "cutoff",
-              "neu",
-              "ändern",
-              "änderung"
-            ]
-          },
-          {
-            "concept": "Belegbarkeit durch Quellen/Zitate",
-            "keywords": [
-              "quelle",
-              "zitat",
-              "zitier",
-              "beleg",
-              "nachprüf",
-              "prüfbar"
-            ]
+      "type": "boss",
+      "title": "Boss: Das Wissens-Orakel",
+      "prompt": "Finde den Fehler, wähle die Reparatur und erkläre, warum sie hilft.",
+      "xp": 60,
+      "difficulty": 3,
+      "lives": 3,
+      "visual": "pipeline",
+      "story": "Der neue NovaCloud-Bot nennt einen alten Preis und erfindet eine Rabattaktion. Im aktuellen Preisblatt steht 16,90 €; eine Aktion wird nicht erwähnt. Der Bot antwortet bisher allein aus seinen Modellgewichten. Du hast drei Leben, um seine Auskunft zu reparieren.",
+      "explanation": "Externe, aktuelle Quellen plus Abstain und überprüfbare Belege machen eine Auskunft kontrollierbar. RAG reduziert das Risiko, ersetzt aber keine Prüfung.",
+      "steps": [
+        {
+          "id": "l01t06s1",
+          "type": "quiz",
+          "title": "Die Ursache",
+          "prompt": "Warum kann dieser Bot trotz flüssiger Antwort falsch liegen?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Richtig: Sprachliche Plausibilität garantiert weder Aktualität noch einen Beleg.",
+          "options": [
+            {
+              "id": "a",
+              "text": "Seine Modellgewichte enthalten möglicherweise veraltetes Wissen; fehlende Fakten werden plausibel ergänzt."
+            },
+            {
+              "id": "b",
+              "text": "Jede Antwort mit einem Euro-Betrag ist automatisch richtig."
+            },
+            {
+              "id": "c",
+              "text": "Ein größeres Kontextfenster aktualisiert die Modellgewichte von selbst."
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "a"
+            ],
+            "option_explanations": {
+              "a": "Richtig: Sprachliche Plausibilität garantiert weder Aktualität noch einen Beleg.",
+              "b": "Auch genaue Zahlen können erfunden oder veraltet sein.",
+              "c": "Ein Kontextfenster speichert Eingabetext für die aktuelle Anfrage; es aktualisiert keine Gewichte."
+            }
           }
-        ],
-        "model_answer": "**Parametrisches Wissen** ist während des Trainings in die Gewichte des Modells eingeflossen. Es ist fest, endet am Knowledge Cutoff und ist nicht zitierbar. **Nicht-parametrisches Wissen** liegt in externen Dokumenten oder Datenbanken und wird zur Laufzeit abgerufen.\n\nRAG reduziert Halluzinationen, weil das Modell die Fakten aus aktuellem, abgerufenem Kontext übernimmt statt aus unscharfer Erinnerung – und weil jede Aussage mit einer Quelle belegt und geprüft werden kann. Ganz verhindert RAG Halluzinationen nicht: Schlechtes Retrieval oder fehlende Abstain-Regeln führen weiterhin zu Fehlern.",
-        "pass_ratio": 0.6
-      }
+        },
+        {
+          "id": "l01t06s2",
+          "type": "quiz",
+          "title": "Die Reparatur",
+          "prompt": "Welche Änderung adressiert beide Fehler am direktesten?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Richtig: Retrieval, Grounding, Belege und Abstain wirken zusammen.",
+          "options": [
+            {
+              "id": "a",
+              "text": "Immer mit höherer Temperatur antworten."
+            },
+            {
+              "id": "b",
+              "text": "Gültiges Preisblatt abrufen, jede Preisbehauptung belegen und ohne Information keine Rabattaktion behaupten."
+            },
+            {
+              "id": "c",
+              "text": "Alle Jahresversionen ohne Datum gemeinsam in den Prompt schreiben."
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "b"
+            ],
+            "option_explanations": {
+              "a": "Höhere Temperatur schafft keine Fakten oder Belege.",
+              "b": "Richtig: Retrieval, Grounding, Belege und Abstain wirken zusammen.",
+              "c": "Unmarkierte Versionen erhöhen die Verwechslungsgefahr."
+            }
+          }
+        },
+        {
+          "id": "l01t06s3",
+          "type": "explain",
+          "title": "Erkläre den Unterschied",
+          "prompt": "Erkläre in eigenen Worten.",
+          "xp": 30,
+          "difficulty": 2,
+          "explanation": "Gute Antworten nennen Gewichte vs. externe Quellen, Aktualität und Belegbarkeit.",
+          "question": "Was ist der Unterschied zwischen parametrischem und nicht-parametrischem Wissen, und warum reduziert RAG Halluzinationen?",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Parametrisches Wissen steckt in den Modellgewichten",
+                "keywords": [
+                  "gewicht",
+                  "parameter",
+                  "training",
+                  "trainiert",
+                  "eingebrannt",
+                  "im modell"
+                ]
+              },
+              {
+                "concept": "Nicht-parametrisches Wissen kommt aus externen Quellen zur Laufzeit",
+                "keywords": [
+                  "extern",
+                  "dokument",
+                  "datenbank",
+                  "index",
+                  "laufzeit",
+                  "abgerufen",
+                  "abrufen",
+                  "retrieval"
+                ]
+              },
+              {
+                "concept": "Aktualisierbarkeit / Aktualität",
+                "keywords": [
+                  "aktuali",
+                  "veraltet",
+                  "cutoff",
+                  "neu",
+                  "ändern",
+                  "änderung"
+                ]
+              },
+              {
+                "concept": "Belegbarkeit durch Quellen/Zitate",
+                "keywords": [
+                  "quelle",
+                  "zitat",
+                  "zitier",
+                  "beleg",
+                  "nachprüf",
+                  "prüfbar"
+                ]
+              }
+            ],
+            "model_answer": "**Parametrisches Wissen** ist während des Trainings in die Gewichte des Modells eingeflossen. Neue Fakten erfordern weitere Gewichtsänderungen; eine genaue Herkunft ist daraus nicht verlässlich ableitbar. Der Trainingsstand begrenzt die Aktualität. **Nicht-parametrisches Wissen** liegt in externen Dokumenten oder Datenbanken und wird zur Laufzeit abgerufen.\n\nRAG reduziert Halluzinationen, weil das Modell die Fakten aus aktuellem, abgerufenem Kontext übernimmt statt aus unscharfer Erinnerung – und weil jede Aussage mit einer Quelle belegt und geprüft werden kann. Ganz verhindert RAG Halluzinationen nicht: Schlechtes Retrieval oder fehlende Abstain-Regeln führen weiterhin zu Fehlern.",
+            "pass_ratio": 0.6
+          }
+        }
+      ]
     }
   ]
 }

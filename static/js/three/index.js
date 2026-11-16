@@ -17,7 +17,8 @@ export function isWebGLAvailable() {
   if (webglOk !== null) return webglOk;
   try {
     const c = document.createElement('canvas');
-    const gl = c.getContext('webgl2') || c.getContext('webgl');
+    // Three r170 requires WebGL 2; a WebGL 1 context is not sufficient.
+    const gl = c.getContext('webgl2');
     webglOk = !!gl;
     gl?.getExtension('WEBGL_lose_context')?.loseContext();
   } catch { webglOk = false; }
@@ -37,9 +38,12 @@ function fallback(container, name, reason) {
   el.textContent = `3D-Visualisierung „${name}“ nicht verfügbar: ${reason}`;
   container.appendChild(el);
   const noop = () => {};
-  return new Proxy({ update: noop, dispose: () => el.remove(), fallback: true }, {
-    get: (target, prop) => (prop in target ? target[prop] : typeof prop === 'string' ? noop : undefined),
-  });
+  // Keep a plain object: a Proxy returning a no-op for the missing `then`
+  // property becomes a thenable and leaves mountScene's Promise pending.
+  return {
+    update: noop, event: noop, reset: noop, highlight: noop, play: noop, replay: noop,
+    dispose: () => el.remove(), fallback: true,
+  };
 }
 
 /**
@@ -59,11 +63,12 @@ export async function mountScene(name, container, data = null, opts = {}) {
     throw new Error(`3D-Szene „${name}“: Es wurde kein gültiges Container-Element übergeben.`);
   }
   if (!isWebGLAvailable()) return fallback(container, name, 'WebGL wird von diesem Browser nicht unterstützt.');
-  const mod = await loader();
   try {
+    // Loading is part of mounting: a missing module must leave the course usable.
+    const mod = await loader();
     return mod.mount(container, data ?? null, opts || {});
   } catch (err) {
-    console.error(`[3D] Szene „${name}“ konnte nicht gestartet werden:`, err);
+    console.warn(`[3D] Szene „${name}“ konnte nicht gestartet werden:`, err);
     return fallback(container, name, err?.message || 'Unbekannter Fehler');
   }
 }

@@ -7,7 +7,7 @@
   "theory": [
     {
       "heading": "Bi-Encoder vs. Cross-Encoder",
-      "body_md": "**Bi-Encoder** (das Embedding-Modell aus Level 3) kodieren Frage und Dokument *getrennt*. Dokumente lassen sich vorab einbetten – deshalb ist die Suche über Millionen Chunks in Millisekunden möglich. Nachteil: Frage und Dokument „sehen“ sich nie gegenseitig.\n\n**Cross-Encoder** bekommen Frage *und* Chunk gemeinsam als Eingabe und geben direkt einen Relevanz-Score aus. Jedes Token der Frage kann auf jedes Token des Chunks achten (Attention). Das ist deutlich genauer – aber pro Paar ein Modellaufruf, also nicht für den ganzen Index machbar.\n\n| | Bi-Encoder | Cross-Encoder |\n|---|---|---|\n| Eingabe | Frage und Chunk getrennt | Frage + Chunk zusammen |\n| Vorberechnung | ja | nein |\n| Geschwindigkeit | sehr schnell | langsam (pro Paar) |\n| Genauigkeit | gut | sehr gut |\n\nAlternativen zum Cross-Encoder: ein LLM als Reranker (teurer, flexibel) oder Late-Interaction-Modelle wie ColBERT (Token-Vektoren, Mittelweg).",
+      "body_md": "**Bi-Encoder** (das Embedding-Modell aus Level 3) kodieren Frage und Dokument *getrennt*. Dokumente lassen sich vorab einbetten – deshalb ist die Suche über Millionen Chunks in Millisekunden möglich. Nachteil: Frage und Dokument „sehen“ sich nie gegenseitig.\n\n**Cross-Encoder** bekommen Frage *und* Chunk gemeinsam als Eingabe und geben direkt einen Relevanz-Score aus. Jedes Token der Frage kann auf jedes Token des Chunks achten (Attention). Das verbessert die Relevanzbewertung oft deutlich (am eigenen Golden Set prüfen) – aber pro Paar ist eine gemeinsame Modellbewertung nötig, also nicht für den ganzen Index machbar.\n\n| | Bi-Encoder | Cross-Encoder |\n|---|---|---|\n| Eingabe | Frage und Chunk getrennt | Frage + Chunk zusammen |\n| Vorberechnung | ja | nein |\n| Geschwindigkeit | sehr schnell | langsam (pro Paar) |\n| Genauigkeit | gut | sehr gut |\n\nAlternativen zum Cross-Encoder: ein LLM als Reranker (teurer, flexibel) oder Late-Interaction-Modelle wie ColBERT (Token-Vektoren, Mittelweg).",
       "key_points": [
         "Bi-Encoder: schnell, vorab berechenbar.",
         "Cross-Encoder: genau, aber pro Paar teuer.",
@@ -17,7 +17,7 @@
     },
     {
       "heading": "Zweistufiges Retrieval",
-      "body_md": "Die Standardarchitektur: **breit und billig abrufen, dann schmal und teuer sortieren.**\n\n1. **Stufe 1 (Recall):** BM25/Dense/Hybrid holt z. B. top-50.\n2. **Stufe 2 (Precision):** Ein Cross-Encoder bewertet die 50 Paare neu.\n3. **Auswahl:** Die besten 3–8 Chunks gehen ins Prompt.\n\n```python\nkandidaten = hybrid_search(frage, k=50)\nscores = cross_encoder.predict([(frage, c.text) for c in kandidaten])\ntop = [c for _, c in sorted(zip(scores, kandidaten), key=lambda x: -x[0])][:5]\n```\n\n**Wichtig:** Der Reranker kann nur sortieren, was Stufe 1 gefunden hat. Fehlt der relevante Chunk in den top-50, hilft kein Reranker.\n\n**Typischer Fehler:** Reranking mit k = 5 in Stufe 1 – dann gibt es nichts mehr zu verbessern.",
+      "body_md": "Die Standardarchitektur: **breit und billig abrufen, dann schmal und teuer sortieren.**\n\n1. **Stufe 1 (Recall):** BM25/Dense/Hybrid holt z. B. top-50.\n2. **Stufe 2 (Precision):** Ein Cross-Encoder bewertet die 50 Paare neu.\n3. **Auswahl:** Die besten 3–8 Chunks gehen ins Prompt.\n\n```python\nkandidaten = hybrid_search(frage, k=50)\nscores = cross_encoder.predict([(frage, c.text) for c in kandidaten])\ntop = [c for _, c in sorted(zip(scores, kandidaten), key=lambda x: -x[0])][:5]\n```\n\n**Wichtig:** Der Reranker kann nur sortieren, was Stufe 1 gefunden hat. Fehlt der relevante Chunk in den top-50, hilft kein Reranker.\n\n**Typischer Fehler:** Nur 5 Kandidaten holen und danach 5 ausgeben, obwohl der entscheidende Beleg gar nicht unter diesen Kandidaten ist. Reranking kann die Reihenfolge verbessern, aber keinen fehlenden Treffer zurückholen; dafür braucht Stufe 1 mehr Recall.",
       "key_points": [
         "Stufe 1 maximiert Recall, Stufe 2 Precision.",
         "Reranker kann nichts herbeizaubern, was Stufe 1 verpasst hat.",
@@ -91,7 +91,7 @@
       "type": "better",
       "title": "Mehr Kontext oder Reranking?",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *Zweistufiges Retrieval* und *Lost in the Middle*.",
       "scenario": "Das Modell hat ein Kontextfenster von 256.000 Tokens. Ein Kollege schlägt vor, einfach die top-50 Chunks ins Prompt zu packen, statt einen Reranker einzubauen.",
@@ -113,7 +113,7 @@
       "type": "tune",
       "title": "Präziser Kontext",
       "prompt": "Frage: **„Wann findet das reguläre Wartungsfenster statt?“** Die Antwort steht in genau einem Dokument. Mit k = 8 ist der Kontext voller Rauschen. Reduziere *k*, sodass mindestens die Hälfte des Kontexts relevant ist (Reranking ist bereits aktiv).",
-      "xp": 40,
+      "xp": 60,
       "difficulty": 2,
       "explanation": "Nur das SLA 2025 nennt das Wartungsfenster (sonntags 02:00–04:00 Uhr MEZ). Bei k = 8 sind höchstens ein, zwei Treffer relevant – Precision ≈ 0,1–0,25. Mit k = 1–2 und Reranking steigt die Precision deutlich. Der Preis: Bei Fragen mit mehreren benötigten Belegen würde ein so kleines k den Recall gefährden.",
       "hint": "Weniger ist hier mehr.",
@@ -222,7 +222,7 @@
       "type": "code",
       "title": "Greedy-Kontextpacking",
       "prompt": "Vervollständige die Funktion, die Chunks nach Score absteigend in ein Token-Budget packt.",
-      "xp": 30,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Absteigend sortieren (`reverse=True`), und nur aufnehmen, wenn `used + t <= budget`.",
       "language": "python",
@@ -253,69 +253,11 @@
       }
     },
     {
-      "id": "l05t06",
-      "type": "explain",
-      "title": "Lost in the Middle",
-      "prompt": "Erkläre kurz.",
-      "xp": 35,
-      "difficulty": 2,
-      "explanation": "Siehe *Lost in the Middle*.",
-      "question": "Was beschreibt der „Lost in the Middle“-Effekt, und welche zwei Konsequenzen ziehst du daraus für die Kontextauswahl?",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Informationen in der Mitte langer Kontexte werden schlechter genutzt",
-            "keywords": [
-              "mitte",
-              "middle",
-              "mittleren"
-            ]
-          },
-          {
-            "concept": "Anfang und Ende werden besser genutzt",
-            "keywords": [
-              "anfang",
-              "ende",
-              "rand",
-              "beginn",
-              "zuerst",
-              "zuletzt"
-            ]
-          },
-          {
-            "concept": "Weniger, relevantere Chunks verwenden",
-            "keywords": [
-              "weniger",
-              "kürzer",
-              "reduz",
-              "rerank",
-              "auswahl",
-              "budget",
-              "nur die besten"
-            ]
-          },
-          {
-            "concept": "Wichtigste Chunks gezielt platzieren",
-            "keywords": [
-              "reihenfolge",
-              "platzier",
-              "anordn",
-              "sortier",
-              "an den anfang",
-              "vorne"
-            ]
-          }
-        ],
-        "model_answer": "„Lost in the Middle“ bezeichnet die Beobachtung, dass Sprachmodelle relevante Informationen am Anfang und am Ende eines langen Kontexts zuverlässiger nutzen als in der Mitte.\n\nKonsequenzen: (1) Den Kontext klein und relevant halten – lieber reranken und 5 gute Chunks liefern als 30 mittelmäßige. (2) Die Reihenfolge bewusst wählen: die stärksten Belege an den Anfang (und ggf. ans Ende), schwächere in die Mitte, und bei langen Kontexten die Frage am Ende wiederholen.",
-        "pass_ratio": 0.6
-      }
-    },
-    {
       "id": "l05t07",
       "type": "boss",
       "title": "Boss: Der Kontext-Kraken",
       "prompt": "Der Kraken stopft dein Kontextfenster voll. Befreie es!",
-      "xp": 100,
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Kontext entrümpelt: Dedup, Reranking, Schwelle, Anordnung.",
       "story": "NovaMind-Antworten sind langsam, teuer und übersehen Fakten. Ein Blick ins Log zeigt: 40 Chunks pro Anfrage, darunter viele Duplikate und vier Versionen der Rate-Limit-Seite.",
@@ -407,6 +349,64 @@
                 "min_score <= c['score']"
               ]
             }
+          }
+        },
+        {
+          "id": "l05t07s4",
+          "type": "explain",
+          "title": "Lost in the Middle",
+          "prompt": "Erkläre kurz.",
+          "xp": 35,
+          "difficulty": 2,
+          "explanation": "Siehe *Lost in the Middle*.",
+          "question": "Was beschreibt der „Lost in the Middle“-Effekt, und welche zwei Konsequenzen ziehst du daraus für die Kontextauswahl?",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Informationen in der Mitte langer Kontexte werden schlechter genutzt",
+                "keywords": [
+                  "mitte",
+                  "middle",
+                  "mittleren"
+                ]
+              },
+              {
+                "concept": "Anfang und Ende werden besser genutzt",
+                "keywords": [
+                  "anfang",
+                  "ende",
+                  "rand",
+                  "beginn",
+                  "zuerst",
+                  "zuletzt"
+                ]
+              },
+              {
+                "concept": "Weniger, relevantere Chunks verwenden",
+                "keywords": [
+                  "weniger",
+                  "kürzer",
+                  "reduz",
+                  "rerank",
+                  "auswahl",
+                  "budget",
+                  "nur die besten"
+                ]
+              },
+              {
+                "concept": "Wichtigste Chunks gezielt platzieren",
+                "keywords": [
+                  "reihenfolge",
+                  "platzier",
+                  "anordn",
+                  "sortier",
+                  "an den anfang",
+                  "vorne"
+                ]
+              }
+            ],
+            "model_answer": "„Lost in the Middle“ bezeichnet die Beobachtung, dass Sprachmodelle relevante Informationen am Anfang und am Ende eines langen Kontexts zuverlässiger nutzen als in der Mitte.\n\nKonsequenzen: (1) Den Kontext klein und relevant halten – lieber reranken und 5 gute Chunks liefern als 30 mittelmäßige. (2) Die Reihenfolge bewusst wählen: die stärksten Belege an den Anfang (und ggf. ans Ende), schwächere in die Mitte, und bei langen Kontexten die Frage am Ende wiederholen.",
+            "pass_ratio": 0.6
           }
         }
       ]
