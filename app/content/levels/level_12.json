@@ -130,9 +130,9 @@
     {
       "id": "l12t03",
       "type": "tune",
-      "title": "Multi-Hop mit genug Platz",
+      "title": "Mehrteilige Frage mit genug Platz",
       "prompt": "Der Planner hat die Frage **„Ab wann wird API v2 abgeschaltet und wie viele Anfragen pro Minute erlaubt die API v3 im Pro-Plan?“** als *eine* Suchanfrage weitergegeben. Zwei Dokumente werden gebraucht (Deprecation-Policy und Rate-Limits v3). Ersetzte Versionen sind gefiltert. Stelle *k* so ein, dass beide gefunden werden.",
-      "xp": 40,
+      "xp": 60,
       "difficulty": 2,
       "explanation": "Mit k = 1 (oder 2) gewinnen oft Chunks desselben Themas, und das zweite Dokument fehlt – der Verifier würde „unvollständig“ melden und eine zweite Iteration auslösen. Ein höheres *k* löst das in einer Iteration, kostet aber Kontext. Ein guter Planner hätte die Frage gleich in zwei Teilfragen zerlegt.",
       "hint": "Zwei Themen, mehrere Chunks pro Thema.",
@@ -197,7 +197,7 @@
       "type": "better",
       "title": "Agent für alles?",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Agentic RAG ist ein Werkzeug für schwierige Fragen, kein Standard für alle.",
       "scenario": "80 % der Anfragen an den NovaCloud-Bot sind einfache FAQ-Fragen („Wie kündige ich?“, „Was kostet Pro?“). Die Latenz soll unter 2 Sekunden bleiben.",
@@ -219,7 +219,7 @@
       "type": "code",
       "title": "Abbruchbedingung",
       "prompt": "Vervollständige die Abbruchprüfung des Orchestrators.",
-      "xp": 30,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Drei Abbruchgründe: Iterationslimit, keine neuen Chunks, wiederholte Anfrage. Ohne sie dreht sich der Agent im Kreis und verbrennt Budget.",
       "visual": "agents",
@@ -249,80 +249,15 @@
       }
     },
     {
-      "id": "l12t06",
-      "type": "explain",
-      "title": "Wann hört der Agent auf?",
-      "prompt": "Erkläre kurz.",
-      "xp": 40,
-      "difficulty": 2,
-      "explanation": "Siehe *Abbruchkriterien für Schleifen*.",
-      "visual": "agents",
-      "question": "Welche Abbruchkriterien braucht ein Agentic-RAG-Loop, und was soll das System tun, wenn es ohne verifizierte Antwort abbricht?",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Harte Grenzen: Iterationen, Budget, Zeit",
-            "keywords": [
-              "iteration",
-              "max",
-              "budget",
-              "kosten",
-              "zeitlimit",
-              "timeout",
-              "token"
-            ]
-          },
-          {
-            "concept": "Erfolg: Verifier gibt frei",
-            "keywords": [
-              "verifier",
-              "verifiz",
-              "freigabe",
-              "faithfulness",
-              "belegt",
-              "geprüft",
-              "erfolg"
-            ]
-          },
-          {
-            "concept": "Kein Fortschritt: keine neuen Infos / Wiederholung",
-            "keywords": [
-              "keine neuen",
-              "wiederhol",
-              "gleiche anfrage",
-              "fortschritt",
-              "dieselben",
-              "schleife",
-              "loop"
-            ]
-          },
-          {
-            "concept": "Bei Misserfolg: Abstain oder Teilantwort statt unverifizierter Antwort",
-            "keywords": [
-              "abstain",
-              "ablehn",
-              "teilantwort",
-              "nicht beantwort",
-              "keine antwort",
-              "ehrlich",
-              "weiß nicht"
-            ]
-          }
-        ],
-        "model_answer": "Ein Agenten-Loop braucht **harte Grenzen** (maximale Iterationen, Token-/Kostenbudget, Zeitlimit), ein **Erfolgskriterium** (der Verifier gibt die Antwort frei, alle Teilfragen sind belegt) und **Fortschrittskriterien** (Abbruch, wenn eine Suche keine neuen Chunks liefert oder der Planner eine bereits gestellte Anfrage wiederholt).\n\nBricht der Loop ohne verifizierte Antwort ab, darf das System nicht einfach die letzte Antwort ausliefern. Richtig ist eine ehrliche **Teilantwort** (was belegt ist, mit Zitaten, plus was fehlt) oder ein **Abstain**.",
-        "pass_ratio": 0.6
-      }
-    },
-    {
       "id": "l12t07",
       "type": "boss",
       "title": "Boss: Der Endlos-Golem",
       "prompt": "Der Golem läuft im Kreis – und nimmt dein Budget mit.",
-      "xp": 100,
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Der Golem steht still: Dein Agent weiß jetzt, wann Schluss ist.",
       "visual": "agents",
-      "story": "Ein Agent hat bei der Frage „Welche Programmiersprache nutzt das NovaCloud-Backend?“ 14 Iterationen gedreht, 40 Suchen gestartet und am Ende eine erfundene Antwort geliefert. Repariere den Agenten in drei Runden.",
+      "story": "Ein Agent hat bei der Frage „Welche Programmiersprache nutzt das NovaCloud-Backend?“ 14 Iterationen gedreht, 40 Suchen gestartet und am Ende eine erfundene Antwort geliefert. Repariere den Agenten in 4 Runden.",
       "lives": 3,
       "steps": [
         {
@@ -420,6 +355,71 @@
           "solution": {
             "correct": "a",
             "why": "**A**: Die unbelegte dritte Aussage ist ein Halluzinationskandidat; sie auszuliefern untergräbt das Vertrauen. Eine Teilantwort ist ehrlich und trotzdem nützlich. *Trade-off:* Nutzer empfinden Teilantworten manchmal als unbefriedigend – ein Hinweis auf weitere Hilfe (Support-Kontakt) mildert das."
+          }
+        },
+        {
+          "id": "l12t07s4",
+          "type": "explain",
+          "title": "Wann hört der Agent auf?",
+          "prompt": "Erkläre kurz.",
+          "xp": 40,
+          "difficulty": 2,
+          "explanation": "Siehe *Abbruchkriterien für Schleifen*.",
+          "visual": "agents",
+          "question": "Welche Abbruchkriterien braucht ein Agentic-RAG-Loop, und was soll das System tun, wenn es ohne verifizierte Antwort abbricht?",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Harte Grenzen: Iterationen, Budget, Zeit",
+                "keywords": [
+                  "iteration",
+                  "max",
+                  "budget",
+                  "kosten",
+                  "zeitlimit",
+                  "timeout",
+                  "token"
+                ]
+              },
+              {
+                "concept": "Erfolg: Verifier gibt frei",
+                "keywords": [
+                  "verifier",
+                  "verifiz",
+                  "freigabe",
+                  "faithfulness",
+                  "belegt",
+                  "geprüft",
+                  "erfolg"
+                ]
+              },
+              {
+                "concept": "Kein Fortschritt: keine neuen Infos / Wiederholung",
+                "keywords": [
+                  "keine neuen",
+                  "wiederhol",
+                  "gleiche anfrage",
+                  "fortschritt",
+                  "dieselben",
+                  "schleife",
+                  "loop"
+                ]
+              },
+              {
+                "concept": "Bei Misserfolg: Abstain oder Teilantwort statt unverifizierter Antwort",
+                "keywords": [
+                  "abstain",
+                  "ablehn",
+                  "teilantwort",
+                  "nicht beantwort",
+                  "keine antwort",
+                  "ehrlich",
+                  "weiß nicht"
+                ]
+              }
+            ],
+            "model_answer": "Ein Agenten-Loop braucht **harte Grenzen** (maximale Iterationen, Token-/Kostenbudget, Zeitlimit), ein **Erfolgskriterium** (der Verifier gibt die Antwort frei, alle Teilfragen sind belegt) und **Fortschrittskriterien** (Abbruch, wenn eine Suche keine neuen Chunks liefert oder der Planner eine bereits gestellte Anfrage wiederholt).\n\nBricht der Loop ohne verifizierte Antwort ab, darf das System nicht einfach die letzte Antwort ausliefern. Richtig ist eine ehrliche **Teilantwort** (was belegt ist, mit Zitaten, plus was fehlt) oder ein **Abstain**.",
+            "pass_ratio": 0.6
           }
         }
       ]

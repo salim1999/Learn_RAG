@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from sklearn.decomposition import PCA
+from threadpoolctl import threadpool_limits
 
 from app import config as app_config
 from app import content_loader
@@ -51,9 +52,14 @@ def _build_projection(index: Index, n: int) -> tuple[PCA | None, np.ndarray, dic
     n_comp = min(3, dense.shape[0], dense.shape[1])
     if n_comp < 1 or dense.shape[0] < 2:
         return None, np.ones(3), {i: (0.0, 0.0, 0.0) for i in range(n)}, sample
-    pca = PCA(n_components=n_comp, svd_solver="full")
-    pca.fit(dense[sample])
-    proj = pca.transform(dense)
+    # Nur drei Anschauungsachsen: eine volle SVD des gesamten Wortschatzes
+    # blockierte auf kleinen Rechnern minutenlang. Randomisierte PCA berechnet
+    # nur diese Achsen, mit festem Seed reproduzierbar. Ein BLAS-Thread vermeidet
+    # Überbelegung beim parallelen API-/Testbetrieb.
+    pca = PCA(n_components=n_comp, svd_solver="randomized", random_state=0)
+    with threadpool_limits(limits=1, user_api="blas"):
+        pca.fit(dense[sample])
+        proj = pca.transform(dense)
     if n_comp < 3:
         proj = np.hstack([proj, np.zeros((proj.shape[0], 3 - n_comp))])
     scale = np.abs(proj[sample]).max(axis=0)

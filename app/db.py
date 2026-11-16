@@ -85,6 +85,31 @@ def set_best_score(task_id: str, level_id: int, score: float) -> None:
         )
 
 
+def record_score(task_id: str, level_id: int, score: float, task_xp: int) -> int:
+    """Bestwert und XP atomar speichern; Teilpunkte können keine zusätzlichen XP erzeugen.
+
+    Das Rundungsziel ist der XP-Gesamtwert des Bestwerts. So bringen zehn kleine
+    Verbesserungen genau so viele XP wie eine vollständig richtige Antwort.
+    BEGIN IMMEDIATE verhindert doppelte XP bei parallelen Tabs/Abgaben.
+    """
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        row = c.execute("SELECT score FROM best_scores WHERE task_id=?", (task_id,)).fetchone()
+        old = float(row[0]) if row else 0.0
+        new = max(old, min(1.0, max(0.0, float(score))))
+        if new > old:
+            c.execute(
+                "INSERT INTO best_scores(task_id, level_id, score, updated) VALUES(?,?,?,?) "
+                "ON CONFLICT(task_id) DO UPDATE SET score=excluded.score, updated=excluded.updated",
+                (task_id, int(level_id), new, _now()),
+            )
+        awarded = c.execute("SELECT COALESCE(SUM(amount),0) FROM xp_log WHERE task_id=?", (task_id,)).fetchone()[0]
+        delta = max(0, int(round(int(task_xp) * new)) - int(awarded))
+        if delta:
+            c.execute("INSERT INTO xp_log(task_id, amount, ts) VALUES(?,?,?)", (task_id, delta, _now()))
+        return delta
+
+
 # --- XP ------------------------------------------------------------------------
 def add_xp(task_id: str, amount: int) -> None:
     if amount <= 0:

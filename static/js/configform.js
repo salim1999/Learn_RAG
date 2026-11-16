@@ -106,7 +106,7 @@ export function configForm(initial, { withQuery = true, title = null, onChange =
         const out = h('output.slider-value', { for: fid });
         const sync = () => {
           out.textContent = `${Number(input.value).toLocaleString('de-DE')}${f.unit ? ` ${f.unit}` : ''}`;
-          input.style.setProperty('--fill', `${((input.value - f.min) / (f.max - f.min)) * 100}%`);
+          input.style.setProperty('--fill', `${((input.value - input.min) / ((input.max - input.min) || 1)) * 100}%`);
         };
         input.addEventListener('input', sync);
         input._sync = sync;
@@ -118,7 +118,7 @@ export function configForm(initial, { withQuery = true, title = null, onChange =
         input = h('input.input', { type: 'date', id: fid });
         row = h('div.field', h('label', { for: fid }, f.label), input);
       }
-      input.addEventListener('change', () => { refreshDeps(); onChange && onChange(); });
+      input.addEventListener('change', () => { refreshChunking(); refreshDeps(); onChange && onChange(); });
       controls.push({ g: g.key, f, input, row });
       fs.appendChild(row);
     }
@@ -129,6 +129,17 @@ export function configForm(initial, { withQuery = true, title = null, onChange =
   verify.addEventListener('change', () => onChange && onChange());
   el.appendChild(h('fieldset.cfg-group', h('legend', 'Verifikation'),
     h('div.field.check-field', h('label.switch', { for: verify.id }, verify, h('span.switch-track', { 'aria-hidden': 'true' }), h('span', 'Antwort nachträglich prüfen')))));
+
+  // Die Engine begrenzt Overlap auf eine halbe Chunk-Länge. Die Regler zeigen
+  // dieselbe Grenze, damit eingestellte und tatsächlich genutzte Werte stimmen.
+  function refreshChunking() {
+    const size = controls.find((c) => c.g === 'chunking' && c.f.name === 'size');
+    const overlap = controls.find((c) => c.g === 'chunking' && c.f.name === 'overlap');
+    if (!size || !overlap) return;
+    overlap.input.max = String(Math.min(300, Math.floor(Number(size.input.value) / 20) * 10));
+    if (Number(overlap.input.value) > Number(overlap.input.max)) overlap.input.value = overlap.input.max;
+    overlap.input._sync?.();
+  }
 
   function refreshDeps() {
     for (const c of controls) {
@@ -154,6 +165,7 @@ export function configForm(initial, { withQuery = true, title = null, onChange =
       if (ctl.input._sync) ctl.input._sync();
     }
     verify.checked = c.verify !== false;
+    refreshChunking();
     refreshDeps();
   }
 

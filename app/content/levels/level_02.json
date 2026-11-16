@@ -27,7 +27,7 @@
     },
     {
       "heading": "Chunk-Größe und Overlap",
-      "body_md": "Die Chunk-Größe ist ein **Trade-off**:\n\n| klein (z. B. 150 Zeichen) | groß (z. B. 1500 Zeichen) |\n|---|---|\n| präzise Treffer | mehr Kontext pro Treffer |\n| Fakt kann vom Bezug getrennt sein | Embedding „verwässert“ (viele Themen in einem Vektor) |\n| mehr Chunks → größerer Index | weniger Chunks passen ins Kontextbudget |\n\n**Overlap** (Überlappung) wiederholt das Ende eines Chunks am Anfang des nächsten. So geht ein Satz, der genau an der Grenze liegt, nicht verloren. Übliche Werte: 10–20 % der Chunk-Größe. Zu viel Overlap erzeugt Duplikate in den top-k.\n\nEine bewährte Technik ist **Parent-Child-Retrieval** (auch „Small-to-Big“): Suche über kleine Chunks (präzise), gib dem LLM aber den umgebenden größeren Abschnitt (vollständig).\n\n> **Merksatz:** Klein suchen, groß lesen.",
+      "body_md": "Die Chunk-Größe ist ein **Trade-off**:\n\n| klein (z. B. 150 Zeichen) | groß (z. B. 1500 Zeichen) |\n|---|---|\n| präzise Treffer | mehr Kontext pro Treffer |\n| Fakt kann vom Bezug getrennt sein | Embedding „verwässert“ (viele Themen in einem Vektor) |\n| mehr Chunks → größerer Index | weniger Chunks passen ins Kontextbudget |\n\n**Overlap** (Überlappung) wiederholt das Ende eines Chunks am Anfang des nächsten. Das erhöht die Chance, dass ein Fakt samt Bezug in mindestens einem Chunk erhalten bleibt. Für Sätze, die länger als der Overlap sind, ist das nicht garantiert; satz- oder strukturbasiertes Chunking schützt die Grenzen gezielter. Übliche Werte: 10–20 % der Chunk-Größe. Zu viel Overlap erzeugt Duplikate in den top-k.\n\nEine bewährte Technik ist **Parent-Child-Retrieval** (auch „Small-to-Big“): Suche über kleine Chunks (präzise), gib dem LLM aber den umgebenden größeren Abschnitt (vollständig).\n\n> **Merksatz:** Klein suchen, groß lesen.",
       "key_points": [
         "Kleine Chunks = präzise, große = kontextreich.",
         "Overlap 10–20 % schützt Grenzsätze.",
@@ -91,7 +91,7 @@
       "type": "code",
       "title": "Fixed-Size-Chunking mit Overlap",
       "prompt": "Vervollständige die Funktion, die einen Text in Chunks der Länge `size` mit `overlap` Zeichen Überlappung zerlegt.",
-      "xp": 30,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Die Schrittweite ist `size - overlap`: Jeder neue Chunk beginnt `overlap` Zeichen vor dem Ende des vorherigen. Der Ausschnitt ist `text[start:start + size]`. Ist `overlap >= size`, wäre die Schrittweite ≤ 0 – in echtem Code sollte man das abfangen.",
       "language": "python",
@@ -126,7 +126,7 @@
       "type": "better",
       "title": "Chunking für ein Preisblatt",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *Chunking-Strategien* und *Metadaten und Chunk-Anreicherung*.",
       "scenario": "Das Preisblatt 2026 besteht aus kurzen Absätzen pro Plan („Pro-Plan: 16,90 € pro Monat, 2 TB …“). Nutzer fragen vor allem nach Preis und Speicher *eines* Plans.",
@@ -148,7 +148,7 @@
       "type": "tune",
       "title": "Finde die maximale Dateigröße",
       "prompt": "Die Frage lautet: **„Wie groß darf eine einzelne Datei maximal sein?“** Die gültige Antwort steht in einem bestimmten Hilfe-Center-Artikel. Stelle Chunk-Größe und *k* so ein, dass der richtige Artikel sicher unter den Treffern ist.",
-      "xp": 40,
+      "xp": 60,
       "difficulty": 2,
       "explanation": "Mit sehr kleinen Chunks und k = 1 gewinnt oft ein Fragment aus dem **veralteten** Artikel 2024 (10 GB) oder ein anderer Treffer. Größere Chunks halten „maximale Größe“ und „50 GB“ zusammen, und ein höheres *k* holt den gültigen Artikel 2026 sicher in den Kontext. Ob danach die veraltete Version aussortiert wird, ist eine Frage der Freshness (Level 9).",
       "hint": "Erhöhe zuerst k, dann die Chunk-Größe.",
@@ -263,61 +263,144 @@
     },
     {
       "id": "l02t06",
-      "type": "explain",
-      "title": "Warum Overlap?",
-      "prompt": "Erkläre kurz.",
-      "xp": 30,
-      "difficulty": 2,
-      "explanation": "Siehe *Chunk-Größe und Overlap*.",
-      "question": "Wozu dient Overlap beim Chunking, und was passiert, wenn man ihn zu groß wählt?",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Informationen an Chunk-Grenzen bleiben erhalten",
-            "keywords": [
-              "grenze",
-              "zerschnitten",
-              "zerschneid",
-              "getrennt",
-              "satz",
-              "übergang"
-            ]
-          },
-          {
-            "concept": "Kontext wird wiederholt/überlappt",
-            "keywords": [
-              "wiederhol",
-              "überlapp",
-              "doppelt",
-              "vorheri",
-              "nächst"
-            ]
-          },
-          {
-            "concept": "Zu viel Overlap erzeugt Redundanz/Duplikate",
-            "keywords": [
-              "redundan",
-              "duplikat",
-              "doppelt",
-              "dopplung",
-              "mehrfach"
-            ]
-          },
-          {
-            "concept": "Kosten: größerer Index bzw. verschwendetes Kontextbudget",
-            "keywords": [
-              "kosten",
-              "speicher",
-              "index",
-              "budget",
-              "platz",
-              "tokens"
-            ]
+      "type": "boss",
+      "title": "Boss: Der Chunk-Zerleger",
+      "prompt": "Diagnostiziere den fehlenden Beleg und repariere die Chunk-Grenze.",
+      "xp": 60,
+      "difficulty": 3,
+      "lives": 3,
+      "visual": "pipeline",
+      "story": "Der Retriever findet „Pro-Plan:“, aber der Preis 16,90 € steht im nächsten Chunk. Eine starre Schnittkante hat den Fakt vom Bezug getrennt. Du hast drei Leben: Ursache finden, Overlap implementieren und die Kosten der Reparatur erklären.",
+      "explanation": "Chunking muss Fakten mitsamt ihrem Bezug erhalten. Overlap hilft an Grenzen, verursacht aber zusätzliche Daten und ersetzt keine sinnvolle Textstruktur.",
+      "steps": [
+        {
+          "id": "l02t06s1",
+          "type": "quiz",
+          "title": "Die Ursache finden",
+          "prompt": "Welche Änderung verhindert die Trennung von Planname und Preis am gezieltesten?",
+          "xp": 20,
+          "difficulty": 2,
+          "explanation": "Richtig: Grenzen und Kontextbezug gehören zur Chunking-Strategie.",
+          "options": [
+            {
+              "id": "a",
+              "text": "Die Generierungstemperatur erhöhen."
+            },
+            {
+              "id": "b",
+              "text": "Preisabschnitte strukturiert zusammenhalten und passende Überlappung bzw. einen Titel-Header verwenden."
+            },
+            {
+              "id": "c",
+              "text": "Alle Metadaten entfernen, damit der Index kleiner wird."
+            }
+          ],
+          "multi": false,
+          "solution": {
+            "correct": [
+              "b"
+            ],
+            "option_explanations": {
+              "a": "Die Information fehlt schon im abgerufenen Kontext; Temperatur repariert das nicht.",
+              "b": "Richtig: Grenzen und Kontextbezug gehören zur Chunking-Strategie.",
+              "c": "Metadaten helfen bei Versionierung und Zuordnung; ihr Entfernen löst die Schnittkante nicht."
+            }
           }
-        ],
-        "model_answer": "Overlap wiederholt das Ende eines Chunks am Anfang des nächsten. Dadurch geht ein Satz oder Fakt, der genau auf einer Chunk-Grenze liegt, nicht verloren – er steht vollständig in mindestens einem Chunk.\n\nIst der Overlap zu groß, enthalten benachbarte Chunks weitgehend denselben Text: Der Index wächst, und in den top-k landen fast identische Chunks (Redundanz), die wertvolles Kontextbudget belegen und andere relevante Treffer verdrängen. Üblich sind 10–20 % der Chunk-Größe.",
-        "pass_ratio": 0.6
-      }
+        },
+        {
+          "id": "l02t06s2",
+          "type": "code",
+          "title": "Die Reparatur umsetzen",
+          "prompt": "Vervollständige die Funktion, die einen Text in Chunks der Länge `size` mit `overlap` Zeichen Überlappung zerlegt.",
+          "xp": 30,
+          "difficulty": 2,
+          "explanation": "Die Schrittweite ist `size - overlap`: Jeder neue Chunk beginnt `overlap` Zeichen vor dem Ende des vorherigen. Der Ausschnitt ist `text[start:start + size]`. Ist `overlap >= size`, wäre die Schrittweite ≤ 0 – in echtem Code sollte man das abfangen.",
+          "language": "python",
+          "template": "def chunk_text(text, size=300, overlap=50):\n    step = {{1}}\n    chunks = []\n    for start in range(0, len(text), step):\n        chunks.append({{2}})\n        if start + size >= len(text):\n            break\n    return chunks",
+          "blanks": [
+            {
+              "id": "1",
+              "placeholder": "Schrittweite"
+            },
+            {
+              "id": "2",
+              "placeholder": "Ausschnitt"
+            }
+          ],
+          "solution": {
+            "blanks": {
+              "1": [
+                "size - overlap",
+                "size-overlap",
+                "(size - overlap)"
+              ],
+              "2": [
+                "text[start:start + size]",
+                "text[start:start+size]",
+                "text[start : start + size]"
+              ]
+            }
+          }
+        },
+        {
+          "id": "l02t06s3",
+          "type": "explain",
+          "title": "Warum Overlap?",
+          "prompt": "Erkläre kurz.",
+          "xp": 30,
+          "difficulty": 2,
+          "explanation": "Siehe *Chunk-Größe und Overlap*.",
+          "question": "Wozu dient Overlap beim Chunking, und was passiert, wenn man ihn zu groß wählt?",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Informationen an Chunk-Grenzen bleiben erhalten",
+                "keywords": [
+                  "grenze",
+                  "zerschnitten",
+                  "zerschneid",
+                  "getrennt",
+                  "satz",
+                  "übergang"
+                ]
+              },
+              {
+                "concept": "Kontext wird wiederholt/überlappt",
+                "keywords": [
+                  "wiederhol",
+                  "überlapp",
+                  "doppelt",
+                  "vorheri",
+                  "nächst"
+                ]
+              },
+              {
+                "concept": "Zu viel Overlap erzeugt Redundanz/Duplikate",
+                "keywords": [
+                  "redundan",
+                  "duplikat",
+                  "doppelt",
+                  "dopplung",
+                  "mehrfach"
+                ]
+              },
+              {
+                "concept": "Kosten: größerer Index bzw. verschwendetes Kontextbudget",
+                "keywords": [
+                  "kosten",
+                  "speicher",
+                  "index",
+                  "budget",
+                  "platz",
+                  "tokens"
+                ]
+              }
+            ],
+            "model_answer": "Overlap wiederholt das Ende eines Chunks am Anfang des nächsten. Das kann einen Satz oder Fakt an einer Chunk-Grenze vollständig erhalten, sofern der überlappende Bereich groß genug ist; es garantiert das nicht für beliebig lange Sätze.\n\nIst der Overlap zu groß, enthalten benachbarte Chunks weitgehend denselben Text: Der Index wächst, und in den top-k landen fast identische Chunks (Redundanz), die wertvolles Kontextbudget belegen und andere relevante Treffer verdrängen. Üblich sind 10–20 % der Chunk-Größe.",
+            "pass_ratio": 0.6
+          }
+        }
+      ]
     }
   ]
 }

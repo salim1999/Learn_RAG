@@ -17,7 +17,7 @@
     },
     {
       "heading": "Cosine-Similarity",
-      "body_md": "Das Standardmaß für Ähnlichkeit ist die **Kosinus-Ähnlichkeit**: der Kosinus des Winkels zwischen zwei Vektoren.\n\n```\ncos(a, b) = (a · b) / (‖a‖ · ‖b‖)\n```\n\nWerte nahe 1 = gleiche Richtung (ähnlich), 0 = orthogonal (unabhängig), −1 = entgegengesetzt.\n\n```python\nimport numpy as np\n\ndef cosine(a, b):\n    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))\n\n# Sind alle Vektoren auf Länge 1 normiert, reicht das Skalarprodukt:\na = a / np.linalg.norm(a)\n```\n\nWeil viele Vektordatenbanken intern Skalarprodukt rechnen, normiert man Embeddings oft beim Speichern. **Typischer Fehler:** Normierung vergessen und Skalarprodukt nutzen – dann gewinnen lange Vektoren statt ähnlicher.",
+      "body_md": "Das Standardmaß für Ähnlichkeit ist die **Kosinus-Ähnlichkeit**: der Kosinus des Winkels zwischen zwei Vektoren.\n\n```\ncos(a, b) = (a · b) / (‖a‖ · ‖b‖)\n```\n\nWerte nahe 1 = gleiche Richtung (ähnlich), 0 = orthogonal (rechtwinklig; daraus folgt keine statistische Unabhängigkeit), −1 = entgegengesetzt.\n\n```python\nimport numpy as np\n\ndef cosine(a, b):\n    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))\n\n# Sind alle Vektoren auf Länge 1 normiert, reicht das Skalarprodukt:\na = a / np.linalg.norm(a)\n```\n\nFür den Nullvektor ist der Kosinus wegen der Division durch 0 nicht definiert. Produktivcode muss solche Eingaben ablehnen oder explizit behandeln. Die Übungsfunktionen setzen Nicht-Nullvektoren voraus.\n\nWeil viele Vektordatenbanken intern Skalarprodukt rechnen, normiert man Embeddings oft beim Speichern. **Typischer Fehler:** Normierung vergessen und Skalarprodukt nutzen – dann gewinnen lange Vektoren statt ähnlicher.",
       "key_points": [
         "Kosinus misst den Winkel, nicht die Länge.",
         "Normierte Vektoren: Skalarprodukt = Kosinus.",
@@ -27,7 +27,7 @@
     },
     {
       "heading": "Sparse vs. Dense",
-      "body_md": "**Sparse-Vektoren** (TF-IDF, BM25) haben eine Dimension pro Wort des Vokabulars; fast alle Einträge sind 0. Sie finden **exakte Begriffe** sehr zuverlässig: Fehlercodes, Produktnamen, Präfixe wie `nc_live_`, Paragraphen.\n\n**Dense-Vektoren** (neuronale Embeddings) haben wenige hundert bis tausend Dimensionen, alle belegt. Sie finden **Synonyme und Paraphrasen**, scheitern aber oft an seltenen Kennungen, Zahlen und Fachkürzeln, die sie nie gesehen haben.\n\n| | Sparse (BM25) | Dense (Embeddings) |\n|---|---|---|\n| Synonyme | schwach | stark |\n| exakte IDs/Zahlen | stark | schwach |\n| Training nötig | nein | ja (vortrainiert) |\n| Erklärbarkeit | hoch | gering |\n\nDeshalb kombinieren moderne Systeme beides (**Hybrid-Suche**, Level 4).",
+      "body_md": "**Sparse-Repräsentationen** wie TF-IDF haben typischerweise eine Dimension pro Term des Vokabulars; fast alle Einträge sind 0. BM25 ist ein lexikalisches Rankingverfahren mit Termgewichten und kann ebenfalls als sparse Repräsentation umgesetzt werden. Sie finden **exakte Begriffe** sehr zuverlässig: Fehlercodes, Produktnamen, Präfixe wie `nc_live_`, Paragraphen.\n\n**Dense-Vektoren** (neuronale Embeddings) haben oft wenige hundert bis einige tausend Dimensionen, deren Werte überwiegend von 0 verschieden sind. Sie finden **Synonyme und Paraphrasen**, scheitern aber oft an seltenen Kennungen, Zahlen und Fachkürzeln, die sie nie gesehen haben.\n\n| | Sparse (BM25) | Dense (Embeddings) |\n|---|---|---|\n| Synonyme | schwach | stark |\n| exakte IDs/Zahlen | stark | schwach |\n| Training nötig | nein | ja (vortrainiert) |\n| Erklärbarkeit | hoch | gering |\n\nDeshalb kombinieren moderne Systeme beides (**Hybrid-Suche**, Level 4).",
       "key_points": [
         "Sparse = exakte Wörter, Dense = Bedeutung.",
         "Seltene IDs und Zahlen: Sparse gewinnt.",
@@ -37,7 +37,7 @@
     },
     {
       "heading": "Grenzen und Fallstricke von Embeddings",
-      "body_md": "- **Negation**: „Pläne *mit* SSO“ und „Pläne *ohne* SSO“ liegen oft sehr nah beieinander.\n- **Zahlen**: „10 GB“ und „50 GB“ sind für ein Embedding fast dasselbe – für den Nutzer nicht.\n- **Domänenvokabular**: Interne Abkürzungen kennt ein allgemeines Modell nicht.\n- **Asymmetrie**: Fragen sind kurz, Dokumente lang. Manche Modelle erwarten deshalb Präfixe wie „query:“ und „passage:“.\n- **Modellwechsel**: Vektoren verschiedener Modelle (oder Dimensionen, z. B. 1.024 → 1.536) sind **nicht vergleichbar**. Ein Modellwechsel bedeutet: **kompletter Re-Index**. NovaCloud weist in den Release Notes 4.0 genau darauf hin.\n\n> **Merksatz:** Frage und Dokumente müssen mit *demselben* Modell eingebettet werden.",
+      "body_md": "- **Negation**: „Pläne *mit* SSO“ und „Pläne *ohne* SSO“ liegen oft sehr nah beieinander.\n- **Zahlen**: „10 GB“ und „50 GB“ sind für ein Embedding fast dasselbe – für den Nutzer nicht.\n- **Domänenvokabular**: Interne Abkürzungen kennt ein allgemeines Modell nicht.\n- **Asymmetrie**: Fragen sind kurz, Dokumente lang. Manche Modelle erwarten deshalb Präfixe wie „query:“ und „passage:“.\n- **Modellwechsel**: Vektoren verschiedener Modelle (oder Dimensionen, z. B. 1.024 → 1.536) sind **nicht vergleichbar**. Ein Modellwechsel bedeutet: **kompletter Re-Index**. NovaCloud weist in den Release Notes 4.0 genau darauf hin.\n\n> **Merksatz:** Frage und Dokumente müssen im *kompatiblen, gemeinsam trainierten Vektorraum* liegen. Meist nutzt man dasselbe Modell und dieselbe Version, mit den richtigen Query-/Passage-Präfixen. Ein Dual-Encoder kann auch getrennte, gemeinsam trainierte Query- und Dokumentencoder besitzen. Gleiche Dimensionen allein bedeuten keine Kompatibilität.\n\n**In dieser App:** Ohne optionalen GPU-Dienst verwendet die Mini-Engine TF-IDF/BM25. Die 3D-Projektion zeigt dann lexikalische Vektoren; sie simuliert keine neuronalen Dense-Embeddings.",
       "key_points": [
         "Negation und Zahlen sind Schwachstellen.",
         "Asymmetrische Modelle brauchen Query-/Passage-Präfixe.",
@@ -91,8 +91,8 @@
       "id": "l03t02",
       "type": "code",
       "title": "Cosine-Similarity implementieren",
-      "prompt": "Vervollständige die Funktion mit NumPy.",
-      "xp": 30,
+      "prompt": "Vervollständige die Funktion mit NumPy. Beide Eingabevektoren sind von 0 verschieden.",
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Kosinus = Skalarprodukt geteilt durch das Produkt der euklidischen Normen.",
       "language": "python",
@@ -131,7 +131,7 @@
       "type": "better",
       "title": "API-Schlüssel-Präfix suchen",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *Sparse vs. Dense*.",
       "scenario": "Entwickler fragen: *„Was bedeutet das Präfix nc_test_?“* Die Antwort steht im Dokument „API-Authentifizierung“. Das Embedding-Modell ist ein allgemeines Modell, das die Zeichenkette `nc_test_` nie gesehen hat.",
@@ -194,10 +194,10 @@
       "type": "explain",
       "title": "Ein Modell für alles",
       "prompt": "Erkläre kurz.",
-      "xp": 35,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Siehe *Grenzen und Fallstricke von Embeddings*.",
-      "question": "Warum müssen Nutzerfrage und Dokumente mit demselben Embedding-Modell eingebettet werden, und was bedeutet das bei einem Modellwechsel?",
+      "question": "Warum müssen Nutzerfrage und Dokumente in einem kompatiblen Vektorraum liegen, und was bedeutet das beim Wechsel auf ein nicht kompatibles Embedding-Modell?",
       "solution": {
         "rubric": [
           {
@@ -247,7 +247,7 @@
             ]
           }
         ],
-        "model_answer": "Jedes Embedding-Modell lernt seinen eigenen Vektorraum: Dimension 17 bedeutet in Modell A etwas völlig anderes als in Modell B, und die Dimensionen können sogar verschieden viele sein (z. B. 1.024 vs. 1.536). Kosinus-Ähnlichkeit ist deshalb nur zwischen Vektoren desselben Modells sinnvoll.\n\nBei einem Modellwechsel müssen **alle** Dokument-Chunks neu eingebettet werden (Re-Index). In der Praxis baut man den neuen Index parallel auf und schaltet erst um, wenn er vollständig ist.",
+        "model_answer": "Jedes Embedding-Modell lernt seinen eigenen Vektorraum: Dimension 17 bedeutet in Modell A etwas völlig anderes als in Modell B, und die Dimensionen können sogar verschieden viele sein (z. B. 1.024 vs. 1.536). Kosinus-Ähnlichkeit ist deshalb nur zwischen Vektoren desselben Modells sinnvoll.\n\nBei einem Modellwechsel müssen **alle** Dokument-Chunks neu eingebettet werden (Re-Index). In der Praxis baut man den neuen Index parallel auf und schaltet erst um, wenn er vollständig ist.\n\nBei einem Dual-Encoder dürfen Query- und Dokumentencoder unterschiedlich sein, wenn sie gemeinsam auf denselben Raum trainiert wurden. Auch identische Dimensionen verschiedener Modelle garantieren keine Kompatibilität.",
         "pass_ratio": 0.6
       }
     },
@@ -255,8 +255,8 @@
       "id": "l03t06",
       "type": "boss",
       "title": "Boss: Der Vektor-Labyrinth-Wächter",
-      "prompt": "Besiege den Wächter in drei Runden.",
-      "xp": 90,
+      "prompt": "Besiege den Wächter in 3 Runden.",
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Du hast die drei Klassiker gemeistert: inkompatible Vektorräume, Normierung und die Grenzen dichter Embeddings.",
       "visual": "vectorspace",

@@ -11,7 +11,7 @@ const W = 11;          // Breite der Achse
 const DAY = 86400000;
 
 function parseDate(s) {
-  if (s instanceof Date) return s.getTime();
+  if (s instanceof Date) return Number.isFinite(s.getTime()) ? s.getTime() : null;
   const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(s ?? ''));
   if (m) return Date.UTC(+m[1], +m[2] - 1, +(m[3] || 1));
   const t = Date.parse(s);
@@ -71,9 +71,10 @@ export function mount(container, data = null, opts = {}) {
 
     const docs = (Array.isArray(d.documents) ? d.documents : []).map((doc) => ({ ...doc, t: parseDate(doc.date) })).filter((doc) => doc.id != null);
     const asOf = parseDate(d.as_of) ?? Date.now();
-    const halfLife = Math.max(1, +(d.half_life_days ?? opts.halfLifeDays ?? 365));
+    const requestedHalfLife = Number(d.half_life_days ?? opts.halfLifeDays ?? 365);
+    const halfLife = Number.isFinite(requestedHalfLife) ? Math.max(1, requestedHalfLife) : 365;
     const times = docs.map((x) => x.t).filter((t) => t != null);
-    const y0 = Math.min(2022, ...times.map((t) => new Date(t).getUTCFullYear()));
+    const y0 = Math.min(2022, new Date(asOf).getUTCFullYear(), ...times.map((t) => new Date(t).getUTCFullYear()));
     const y1 = Math.max(2026, new Date(asOf).getUTCFullYear(), ...times.map((t) => new Date(t).getUTCFullYear()));
     const tStart = Date.UTC(y0, 0, 1), tEnd = Date.UTC(y1 + 1, 0, 1);
     const xOf = (t) => -W / 2 + ((t - tStart) / (tEnd - tStart)) * W;
@@ -178,7 +179,11 @@ export function mount(container, data = null, opts = {}) {
       if (lane === -1) { lane = laneEnd.length; laneEnd.push(x); } else laneEnd[lane] = x;
       const z = lane >= MAX_LANES ? -0.35 * Math.floor(lane / MAX_LANES) : 0;
       const y = 0.5 + (lane % MAX_LANES) * 0.42;
-      const stale = doc.superseded_by != null && doc.superseded_by !== '';
+      const successor = byId.get(String(doc.superseded_by));
+      const replaced = doc.superseded_by != null && doc.superseded_by !== '';
+      // Versions published after the selected reference date do not supersede
+      // the version that was applicable at that historical time.
+      const stale = replaced && (successor?.t == null || successor.t <= asOf);
       const future = doc.t != null && doc.t > asOf;
       const base = stale ? new THREE.Color(COLORS.stale) : docColor(rootOf(id));
       const mat = new THREE.MeshStandardMaterial({
@@ -187,18 +192,18 @@ export function mount(container, data = null, opts = {}) {
       });
       const mesh = new THREE.Mesh(cardGeo, mat);
       const target = new THREE.Vector3(x, y, z);
-      mesh.position.copy(target).add(new THREE.Vector3(0, 1.6, 0));
-      mesh.scale.setScalar(0.001);
+      mesh.position.copy(target).add(new THREE.Vector3(0, stage.reducedMotion ? 0 : 1.6, 0));
+      mesh.scale.setScalar(stage.reducedMotion ? 1 : 0.001);
       mesh.userData.docId = id;
       const label = createLabel(id, { size: 10, bg: null, color: stale ? COLORS.stale : '#ffffff', opacity: stale ? 0.7 : 1 });
       label.position.copy(target).add(new THREE.Vector3(0, 0, 0.03));
-      label.visible = false;
+      label.visible = stage.reducedMotion;
       world.add(mesh, label);
       stemPos.push(x, 0.02, z, x, y - 0.15, z);
       const w = doc.t != null ? Math.pow(0.5, Math.max(0, asOf - doc.t) / DAY / halfLife) : null;
-      const card = { id, doc, mesh, mat, label, target, stale, weight: w, baseEI: mat.emissiveIntensity, baseOpacity: mat.opacity, hi: 0 };
+      const card = { id, doc, mesh, mat, label, target, stale, future, weight: w, baseEI: mat.emissiveIntensity, baseOpacity: mat.opacity, hi: 0 };
       cards.set(id, card);
-      stage.tween({
+      if (!stage.reducedMotion) stage.tween({
         delay: (stage.reducedMotion ? 0 : 0.07) * order, duration: stage.reducedMotion ? 0.2 : 0.6, ease: Ease.outBack,
         onUpdate: (k) => { if (myGen !== gen) return; mesh.position.lerpVectors(target.clone().add(new THREE.Vector3(0, 1.6, 0)), target, Math.min(1, k)); mesh.scale.setScalar(Math.max(0.001, k)); },
         onComplete: () => { if (myGen === gen) label.visible = true; },
@@ -231,7 +236,11 @@ export function mount(container, data = null, opts = {}) {
       world.add(tube, cone, dot);
       const edge = { from: c.id, to: n.id, curve, tube, cone, dot, mat, phase: Math.random(), ready: false };
       edges.push(edge);
-      stage.tween({
+      if (stage.reducedMotion) {
+        setTubeProgress(tube, 1);
+        cone.visible = true;
+        edge.ready = true;
+      } else stage.tween({
         delay: startEdges + ei++ * 0.12, duration: stage.reducedMotion ? 0.2 : 0.7, ease: Ease.inOutCubic,
         onUpdate: (k) => { if (myGen === gen) setTubeProgress(tube, k); },
         onComplete: () => { if (myGen !== gen) return; cone.visible = true; dot.visible = !stage.reducedMotion; edge.ready = true; },
@@ -248,7 +257,7 @@ export function mount(container, data = null, opts = {}) {
     hiGlow.position.copy(c.target).add(new THREE.Vector3(0, 0, -0.05));
     hiGlow.material.color.set(c.stale ? COLORS.stale : COLORS.accent);
     hiLabel.position.copy(c.target).add(new THREE.Vector3(0, 0.26, 0));
-    const succ = c.doc.superseded_by ? ` → ersetzt durch ${c.doc.superseded_by}` : ' · aktuell';
+    const succ = c.stale ? ` → ersetzt durch ${c.doc.superseded_by}` : c.future ? ' · nach dem Stichtag' : ' · zum Stichtag gültig';
     hiLabel.setText(`${c.id}: ${truncate(c.doc.title || '', 48)}${c.stale ? ' ⚠' : ''}${succ}`);
     hiLabel.setBorder(c.stale ? COLORS.stale : COLORS.accent);
     hiLabel.setOpacity(1);
@@ -263,7 +272,8 @@ export function mount(container, data = null, opts = {}) {
       const lines = [];
       if (c.doc.date) lines.push(`Datum: ${c.doc.t != null ? fmt(c.doc.t) : c.doc.date}${c.doc.version ? ` · Version ${c.doc.version}` : ''}`);
       if (c.doc.source) lines.push(`Quelle: ${c.doc.source}`);
-      if (c.doc.superseded_by) lines.push(`⚠ veraltet – ersetzt durch ${c.doc.superseded_by}`);
+      if (c.stale) lines.push(`⚠ veraltet – ersetzt durch ${c.doc.superseded_by}`);
+      else if (c.doc.superseded_by) lines.push(`Zum Stichtag gültig; spätere Version: ${c.doc.superseded_by}`);
       const prev = [...cards.values()].filter((o) => String(o.doc.superseded_by) === c.id).map((o) => o.id);
       if (prev.length) lines.push(`ersetzt: ${prev.join(', ')}`);
       if (c.weight != null) lines.push(`Recency-Gewicht: ${c.weight.toFixed(2).replace('.', ',')}`);
@@ -298,6 +308,7 @@ export function mount(container, data = null, opts = {}) {
   function startDemo() {
     isDemo = true;
     build(DEMO);
+    if (stage.reducedMotion) { setHighlight('d10'); return; }
     const chain = ['d01', 'd05', 'd10', 'd02', 'd06', 'd11', 'd07', 'd12'];
     let i = 0;
     const step = () => { setHighlight(chain[i++ % chain.length]); demoTimer = stage.after(2.6, step); };

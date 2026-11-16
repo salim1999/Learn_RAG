@@ -2,7 +2,7 @@
 
 import { api } from './api.js';
 import {
-  h, md, clear, loadingBlock, errorBlock, mountScene, renderMarkdown, toast,
+  append, h, md, clear, loadingBlock, errorBlock, mountScene, renderMarkdown, toast,
   floatXP, confetti, shake, TASK_TYPES, difficultyDots,
 } from './ui.js';
 import { getLevel, setProgress, levelProgress } from './state.js';
@@ -121,6 +121,7 @@ export async function viewTask(root, { id, taskId }, { alive }) {
     const answer = handle.getAnswer();
     if (answer == null) { toast('Bitte zuerst eine Antwort geben.', 'info'); return; }
     busy = true;
+    stage.inert = true;
     checkBtn.disabled = true;
     checkBtn.classList.add('is-busy');
     checkBtn.textContent = 'Wird geprüft …';
@@ -130,12 +131,14 @@ export async function viewTask(root, { id, taskId }, { alive }) {
     } catch (err) {
       toast(err.message, 'error');
       busy = false;
+      stage.inert = false;
       checkBtn.classList.remove('is-busy');
       checkBtn.textContent = 'Prüfen';
       checkBtn.disabled = !ready;
       return;
     }
     busy = false;
+    stage.inert = false;
     checkBtn.classList.remove('is-busy');
     checkBtn.textContent = 'Prüfen';
     if (!alive()) return;
@@ -143,9 +146,9 @@ export async function viewTask(root, { id, taskId }, { alive }) {
 
     const isBoss = task.type === 'boss';
     const d = result.details || {};
-    const bossDone = isBoss && (d.finished || d.lives_left === 0
-      || (typeof d.step === 'number' && d.step + 1 >= (task.steps || []).length));
-    finished = !isBoss || bossDone;
+    const bossDone = isBoss && (d.finished || d.lives_left === 0);
+    const tuneAgain = task.type === 'tune' && !result.correct;
+    finished = isBoss ? bossDone : !tuneAgain;
 
     // Das Modul zuerst: Boss ruft für den nächsten Schritt ggf. onReady() auf
     ready = false;
@@ -177,7 +180,7 @@ export async function viewTask(root, { id, taskId }, { alive }) {
 
     const cls = ok ? 'result-ok' : result.score > 0 && !(isBoss && !bossDone) ? 'result-partial' : 'result-bad';
     resultPanel.className = `result-panel ${cls}`;
-    resultPanel.append(
+    append(resultPanel,
       h('div.result-head',
         h('span.result-icon', { 'aria-hidden': 'true' }, ok ? '✓' : result.score > 0 && !(isBoss && !bossDone) ? '◐' : '✕'),
         h('div',
@@ -203,7 +206,12 @@ export async function viewTask(root, { id, taskId }, { alive }) {
       const p = result.progress && result.progress.levels;
       const nextLevelOpen = p && p[String(nextLevelId)] && p[String(nextLevelId)].unlocked;
       const row = h('div.btn-row.result-actions',
-        next
+        task.type === 'tune' && !result.correct
+          ? h('button.btn.btn-primary', { type: 'button', onclick: () => {
+            stage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            stage.querySelector('input[type="range"]')?.focus({ preventScroll: true });
+          } }, 'Parameter weiter anpassen')
+          : next
           ? h('a.btn.btn-primary', { href: `#/level/${level.id}/task/${encodeURIComponent(next.id)}` }, 'Weiter zur nächsten Aufgabe')
           : nextLevelOpen
             ? h('a.btn.btn-primary', { href: `#/level/${nextLevelId}` }, `Weiter zu Level ${nextLevelId}`)

@@ -1,0 +1,11 @@
+{
+  "name": "rag-academy-browser-tests",
+  "private": true,
+  "description": "Optional browser acceptance tests; the app itself needs no Node build.",
+  "scripts": {
+    "test:browser": "node scripts/browser_smoke.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

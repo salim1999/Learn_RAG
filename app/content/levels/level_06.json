@@ -91,7 +91,7 @@
       "type": "better",
       "title": "Zwei System-Prompts",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *Anatomie eines Grounding-Prompts*.",
       "scenario": "Der NovaCloud-Bot soll Fragen zu Preisen, Limits und Richtlinien beantworten. Im Kontext stehen oft mehrere Versionen eines Dokuments.",
@@ -113,7 +113,7 @@
       "type": "better",
       "title": "Unbeantwortbare Frage",
       "prompt": "Was wäre besser?",
-      "xp": 35,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *„Nur aus dem Kontext“ und die Abstain-Anweisung*.",
       "visual": "hallucination",
@@ -242,7 +242,7 @@
       "type": "code",
       "title": "Kontext mit IDs bauen",
       "prompt": "Baue den Kontextblock, in dem jeder Chunk mit ID und Datum erscheint, z. B. `[d04#1] (2026-03-01) Pro-Plan: …`.",
-      "xp": 30,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Jede Zeile trägt ID und Datum – so kann das Modell zitieren und Versionen unterscheiden. Verbunden wird mit Zeilenumbrüchen.",
       "language": "python",
@@ -274,74 +274,11 @@
       }
     },
     {
-      "id": "l06t06",
-      "type": "explain",
-      "title": "Warum Abstain?",
-      "prompt": "Erkläre kurz.",
-      "xp": 35,
-      "difficulty": 2,
-      "explanation": "Siehe *„Nur aus dem Kontext“ und die Abstain-Anweisung*.",
-      "question": "Warum braucht ein RAG-System eine explizite Abstain-Regel, und wie kann man sie zusätzlich zur Prompt-Anweisung technisch absichern?",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Ohne Erlaubnis füllt das Modell Lücken / halluziniert",
-            "keywords": [
-              "halluzin",
-              "erfind",
-              "rät",
-              "raten",
-              "lücke",
-              "plausib"
-            ]
-          },
-          {
-            "concept": "Abstain = ausdrücklich „weiß ich nicht“ sagen dürfen",
-            "keywords": [
-              "ablehn",
-              "abstain",
-              "weiß nicht",
-              "keine information",
-              "nicht beantwort",
-              "verweiger"
-            ]
-          },
-          {
-            "concept": "Technische Schwelle auf Retrieval-Score/Grounding",
-            "keywords": [
-              "schwelle",
-              "threshold",
-              "score",
-              "ähnlichkeit",
-              "grounding",
-              "confidence",
-              "konfidenz"
-            ]
-          },
-          {
-            "concept": "Kalibrierung / Messung von Abstain-Rate",
-            "keywords": [
-              "kalibr",
-              "golden",
-              "evaluation",
-              "messen",
-              "abstain-rate",
-              "unbeantwortbar",
-              "testset",
-              "test-set"
-            ]
-          }
-        ],
-        "model_answer": "Sprachmodelle sind darauf trainiert, hilfreich zu antworten. Fehlt die Information im Kontext, füllen sie die Lücke ohne ausdrückliche Erlaubnis mit plausiblem, oft falschem Wissen. Die Abstain-Regel gibt einen legitimen Ausweg: „Dazu habe ich keine Information.“\n\nTechnisch sichert man das ab, indem man vor der Generierung prüft, ob der beste Retrieval-/Reranker-Score über einer Schwelle liegt, und nach der Generierung die Grounding-Werte der Sätze prüft. Die Schwelle wird an einem Golden Set mit beantwortbaren und unbeantwortbaren Fragen kalibriert, damit weder zu viel halluziniert noch zu oft abgelehnt wird.",
-        "pass_ratio": 0.6
-      }
-    },
-    {
       "id": "l06t07",
       "type": "boss",
       "title": "Boss: Der Prompt-Phantom",
-      "prompt": "Drei Runden gegen das Phantom, das deine Prompts verdreht.",
-      "xp": 100,
+      "prompt": "4 Runden gegen das Phantom, das deine Prompts verdreht.",
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Das Phantom ist gebannt: klare Regeln, sichtbare Metadaten, geprüfte Zitate.",
       "visual": "hallucination",
@@ -447,6 +384,69 @@
           "solution": {
             "correct": "b",
             "why": "**B** gibt dem Modell die Information, die es zur Konfliktauflösung braucht. In A sind beide Aussagen gleichwertig – das Modell kann nur raten. *Trade-off:* Metadaten kosten ein paar Tokens pro Chunk; noch besser ist es, ersetzte Versionen schon vor dem Prompt zu filtern (Level 9) und sie nur bei historischen Fragen zuzulassen."
+          }
+        },
+        {
+          "id": "l06t07s4",
+          "type": "explain",
+          "title": "Warum Abstain?",
+          "prompt": "Erkläre kurz.",
+          "xp": 35,
+          "difficulty": 2,
+          "explanation": "Siehe *„Nur aus dem Kontext“ und die Abstain-Anweisung*.",
+          "question": "Warum braucht ein RAG-System eine explizite Abstain-Regel, und wie kann man sie zusätzlich zur Prompt-Anweisung technisch absichern?",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Ohne Erlaubnis füllt das Modell Lücken / halluziniert",
+                "keywords": [
+                  "halluzin",
+                  "erfind",
+                  "rät",
+                  "raten",
+                  "lücke",
+                  "plausib"
+                ]
+              },
+              {
+                "concept": "Abstain = ausdrücklich „weiß ich nicht“ sagen dürfen",
+                "keywords": [
+                  "ablehn",
+                  "abstain",
+                  "weiß nicht",
+                  "keine information",
+                  "nicht beantwort",
+                  "verweiger"
+                ]
+              },
+              {
+                "concept": "Technische Schwelle auf Retrieval-Score/Grounding",
+                "keywords": [
+                  "schwelle",
+                  "threshold",
+                  "score",
+                  "ähnlichkeit",
+                  "grounding",
+                  "confidence",
+                  "konfidenz"
+                ]
+              },
+              {
+                "concept": "Kalibrierung / Messung von Abstain-Rate",
+                "keywords": [
+                  "kalibr",
+                  "golden",
+                  "evaluation",
+                  "messen",
+                  "abstain-rate",
+                  "unbeantwortbar",
+                  "testset",
+                  "test-set"
+                ]
+              }
+            ],
+            "model_answer": "Sprachmodelle sind darauf trainiert, hilfreich zu antworten. Fehlt die Information im Kontext, füllen sie die Lücke ohne ausdrückliche Erlaubnis mit plausiblem, oft falschem Wissen. Die Abstain-Regel gibt einen legitimen Ausweg: „Dazu habe ich keine Information.“\n\nTechnisch sichert man das ab, indem man vor der Generierung prüft, ob der beste Retrieval-/Reranker-Score über einer Schwelle liegt, und nach der Generierung die Grounding-Werte der Sätze prüft. Die Schwelle wird an einem Golden Set mit beantwortbaren und unbeantwortbaren Fragen kalibriert, damit weder zu viel halluziniert noch zu oft abgelehnt wird.",
+            "pass_ratio": 0.6
           }
         }
       ]

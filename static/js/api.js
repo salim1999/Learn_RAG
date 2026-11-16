@@ -49,6 +49,10 @@ export const api = {
     }),
   submitBossStep: (levelId, taskId, step, answer) =>
     api.submit(levelId, taskId, { step, answer }),
+  restartBoss: (levelId, taskId) =>
+    request(`/levels/${encodeURIComponent(levelId)}/tasks/${encodeURIComponent(taskId)}/restart`, {
+      method: 'POST', body: {},
+    }),
   progress: () => request('/progress'),
   reset: () => request('/progress/reset', { method: 'POST' }),
   corpus: () => request('/corpus'),

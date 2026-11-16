@@ -52,6 +52,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; scroll-padding-top: 90px; }
 body {
   margin: 0;
@@ -155,6 +156,7 @@ kbd { background: var(--surface-2); border: 1px solid var(--line); border-bottom
 .hud-streak { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: var(--fs-sm); }
 .hud-streak-label { color: var(--muted); }
 .hud-badges { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px 4px 8px; font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.hud-badge-icons { white-space: nowrap; }
 .hud-badges:hover { border-color: var(--accent); }
 .hud-badges[aria-expanded="true"] { background: var(--surface-2); border-color: var(--accent); }
 .badge-panel { grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; margin-bottom: 4px; }
@@ -931,7 +933,7 @@ a.cite:hover { background: var(--accent-soft); }
 @media (max-width: 760px) {
   .hud { grid-template-columns: auto minmax(0, 1fr); padding-top: 8px; padding-bottom: 8px; gap: 8px 12px; }
   .hud-rank { grid-column: 1 / -1; grid-row: 2; max-width: none; }
-  .hud-meta { justify-self: end; gap: 8px; }
+  .hud-meta { justify-self: end; min-width: 0; max-width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: 6px 8px; }
   .hud-next { display: none; }
   .hud-badge-count { display: none; }
   .hud-streak-label { display: none; }
@@ -962,7 +964,12 @@ a.cite:hover { background: var(--accent-soft); }
 
 @media (max-width: 520px) {
   :root { --fs-base: 1rem; }
+  .brand { gap: 8px; }
   .brand-name { font-size: 1rem; }
+  .hud-meta { gap: 6px; }
+  .hud-badges { flex: none; padding: 4px 6px; }
+  .hud-badge-icons { display: block; max-width: 1.15em; overflow: hidden; }
+  .hud-meta .chip { font-size: .75rem; padding: 3px 7px; gap: 5px; }
   .chip { padding: 3px 8px; }
   .task-link { grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 12px 14px; }
   .task-state { grid-column: 2; }
@@ -985,7 +992,10 @@ a.cite:hover { background: var(--accent-soft); }
 }
 
 @media (max-width: 380px) {
+  .brand-mark { width: 22px; height: 22px; }
+  .brand-name { font-size: .9rem; }
   .hud-streak { display: none; }
+  .hud-meta .chip { font-size: .7rem; padding-inline: 6px; }
   .mainnav a { padding: 8px 10px; }
 }
 

@@ -513,6 +513,9 @@ export function createStage(container, opts = {}) {
       scene.traverse((o) => {
         if (o.geometry) o.geometry.dispose();
         if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => disposeMaterial(m, true));
+        // InstancedMesh owns instanceMatrix/instanceColor buffers in addition
+        // to its geometry. renderer.dispose alone does not release its objects.
+        if (o.isInstancedMesh) o.dispose();
         if (o.isCSS2DObject && o.element?.parentNode) o.element.parentNode.removeChild(o.element);
       });
       for (const r of tracked) { try { r.dispose?.(); } catch { /* ignorieren */ } }

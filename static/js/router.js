@@ -1,5 +1,7 @@
 // RAG Academy – minimaler Hash-Router mit Aufräum-Unterstützung
 
+import { errorBlock } from './ui.js';
+
 export function createRouter(root, routes, { onNavigate } = {}) {
   let cleanup = null;
   let token = 0;
@@ -15,10 +17,12 @@ export function createRouter(root, routes, { onNavigate } = {}) {
 
   async function run() {
     const my = ++token;
-    if (cleanup) {
-      try { await cleanup(); } catch (e) { console.warn('Aufräumen fehlgeschlagen', e); }
-      cleanup = null;
+    const previous = cleanup;
+    cleanup = null;
+    if (previous) {
+      try { await previous(); } catch (e) { console.warn('Aufräumen fehlgeschlagen', e); }
     }
+    if (my !== token) return;
     const found = match(location.hash) || match('#/');
     while (root.firstChild) root.removeChild(root.firstChild);
     root.className = `view view-${found.route.name}`;
@@ -34,6 +38,7 @@ export function createRouter(root, routes, { onNavigate } = {}) {
       cleanup = typeof c === 'function' ? c : null;
     } catch (err) {
       console.error(err);
+      if (alive()) root.replaceChildren(errorBlock(err, run));
     }
   }
 

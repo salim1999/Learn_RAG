@@ -28,8 +28,9 @@ export function render(container, task, ctx) {
   }
   container.appendChild(grid);
 
-  const reason = h('textarea.textarea', { id: `${name}-reason`, rows: '3', maxlength: '1000', placeholder: 'Warum ist diese Variante besser? (optional, hilft beim Lernen)' });
-  container.appendChild(h('div.field', h('label', { for: reason.id }, 'Deine Begründung'), reason));
+  const reason = h('textarea.textarea', { id: `${name}-reason`, rows: '3', maxlength: '1000', minlength: '10', placeholder: 'Warum ist diese Variante besser? Begründe deine Wahl in mindestens 10 Zeichen.' });
+  reason.addEventListener('input', update);
+  container.appendChild(h('div.field', h('label', { for: reason.id }, 'Deine Begründung (mindestens 10 Zeichen)'), reason));
 
   const live = h('div.ab-live');
   container.appendChild(live);
@@ -39,7 +40,7 @@ export function render(container, task, ctx) {
   }
   function update() {
     for (const k of ['a', 'b']) cards[k].card.classList.toggle('is-selected', cards[k].input.checked);
-    ctx.onReady(!!choice());
+    ctx.onReady(!!choice() && reason.value.trim().length >= 10);
   }
 
   async function runLive() {
@@ -69,7 +70,7 @@ export function render(container, task, ctx) {
   return {
     getAnswer() {
       const c = choice();
-      return c ? { choice: c, reason: reason.value.trim() } : null;
+      return c && reason.value.trim().length >= 10 ? { choice: c, reason: reason.value.trim() } : null;
     },
     showResult(result) {
       const d = result.details || {};

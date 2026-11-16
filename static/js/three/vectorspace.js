@@ -57,6 +57,13 @@ export function mount(container, data = null, opts = {}) {
     { color: '#ffffff', label: 'Anfrage' },
     { color: COLORS.ok, label: 'Top-k-Treffer' },
   ]);
+  const projectionNote = document.createElement('div');
+  Object.assign(projectionNote.style, {
+    position: 'absolute', left: '10px', top: '8px', pointerEvents: 'none',
+    color: COLORS.muted, font: '500 11px/1.4 system-ui, sans-serif',
+    maxWidth: 'calc(100% - 20px)',
+  });
+  stage.wrap.appendChild(projectionNote);
 
   // ---- Zustand
   let items = [];
@@ -159,6 +166,14 @@ export function mount(container, data = null, opts = {}) {
       label.visible = false;
       scene.add(mesh, pulse, label);
       const ray = { mesh, pulse, label, it };
+      if (stage.reducedMotion) {
+        aimBeam(mesh, queryPos, it.to, 1, it.rank === 1 ? 0.014 : 0.009);
+        label.visible = true;
+        it.emph = 1;
+        rays.push(ray);
+        dirty = true;
+        return;
+      }
       const dur = stage.reducedMotion ? 0.25 : 0.55;
       ray.tween = stage.tween({
         delay: delay + i * (stage.reducedMotion ? 0.15 : 0.5), duration: dur, ease: Ease.outCubic,
@@ -242,6 +257,15 @@ export function mount(container, data = null, opts = {}) {
     items = parsed.list.map((src) => makeItem(src, src.p.clone().multiplyScalar(S), prev));
     buildMeshes();
     setQueryLabel(parsed.text);
+    if (stage.reducedMotion) {
+      queryPos.copy(qTo);
+      transK = 1;
+      showRays(myGen);
+      writeInstances();
+      dirty = false;
+      stage.renderOnce();
+      return;
+    }
     transK = 0;
     const dur = stage.reducedMotion ? 0.3 : 1.2;
     stage.tween({
@@ -290,6 +314,16 @@ export function mount(container, data = null, opts = {}) {
 
   function startDemo() {
     const demo = makeDemo();
+    if (stage.reducedMotion) {
+      const q = demo.queries[0];
+      const qPos = demo.docs.filter((d) => q.docs.includes(d.id))
+        .reduce((a, d) => a.add(new THREE.Vector3(...d.c)), new THREE.Vector3())
+        .divideScalar(q.docs.length);
+      const hits = demo.list.slice().sort((a, b) => a.p.distanceTo(qPos) - b.p.distanceTo(qPos)).slice(0, 4);
+      hits.forEach((it, i) => { it.rank = i + 1; });
+      apply({ list: demo.list, q: qPos, text: q.text });
+      return;
+    }
     apply({ list: demo.list, q: new THREE.Vector3(0, 0, 0), text: null }, { animateQuery: false });
     // Erste Runde: keine Treffer (keine Ränge) → direkt Demo-Zyklus starten
     let qi = 0;
@@ -352,6 +386,9 @@ export function mount(container, data = null, opts = {}) {
 
   function update(newData) {
     demoTimer?.cancel(); demoTimer = null;
+    projectionNote.textContent = !newData ? 'Demo: schematischer Vektorraum'
+      : newData.config?.retrieval?.mmr ? 'PCA-Projektion · MMR wählt Relevanz und Vielfalt'
+        : 'PCA-Projektion · Abstände in 3D sind nur eine Näherung';
     if (!newData) { startDemo(); return; }
     apply(parseRun(newData));
   }

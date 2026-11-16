@@ -1,5 +1,19 @@
+# Local runtime state and credentials
 .env
+.env.*
+!.env.example
+.venv/
+venv/
 data/
+*.db
+*.sqlite*
 __pycache__/
-*.pyc
+*.py[cod]
 .pytest_cache/
+.coverage
+htmlcov/
+node_modules/
+artifacts/
+playwright-report/
+test-results/
+.DS_Store

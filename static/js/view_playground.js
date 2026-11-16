@@ -59,10 +59,11 @@ function gpuWarmupBox(alive) {
       const res = await api.gpuWarmup();
       if (!alive()) return;
       const secs = Math.round((Date.now() - t0) / 1000);
-      const ok = !res || res.ok !== false;
-      const msg = res && (res.message || res.detail || res.status);
-      statusEl.className = `gpu-status ${ok ? 'is-ok' : 'is-bad'}`;
-      statusEl.textContent = `${ok ? 'GPU bereit' : 'GPU nicht bereit'} nach ${secs} s${msg && typeof msg === 'string' ? `: ${msg}` : ''}`;
+      const status = res?.status || 'error';
+      const msg = res?.message || res?.detail || '';
+      const labels = { ready: 'GPU bereit', warming: 'GPU startet', disabled: 'GPU deaktiviert', error: 'GPU nicht bereit' };
+      statusEl.className = `gpu-status ${status === 'ready' ? 'is-ok' : status === 'warming' ? 'is-busy' : 'is-bad'}`;
+      statusEl.textContent = `${labels[status] || 'GPU-Status unbekannt'} nach ${secs} s${msg && typeof msg === 'string' ? `: ${msg}` : ''}`;
       loadStatus();
     } catch (err) {
       if (!alive()) return;
@@ -94,7 +95,7 @@ export async function viewPlayground(root, params, { alive }) {
   let saved = loadSaved() || {};
   let mode = saved.mode === 'ab' ? 'ab' : 'single';
   let activeScene = null;
-  let activeTab = saved.tab || 'vectorspace';
+  let activeTab = SCENE_TABS.some((t) => t.name === saved.tab) ? saved.tab : 'vectorspace';
   let lastRun = null;
   let runToken = 0;
 

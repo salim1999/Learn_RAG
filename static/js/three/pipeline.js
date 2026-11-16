@@ -178,7 +178,7 @@ export function mount(container, data = null, opts = {}) {
       };
     }
     const chunks = Array.isArray(d.chunks) ? d.chunks : [];
-    const freshOn = !!d.config?.freshness?.enabled;
+    const freshOn = !!(d.config?.freshness?.enabled || d.config?.freshness?.drop_superseded);
     const verifyOn = d.config?.verify !== false;
     let dropped = 0;
     if (freshOn) {
@@ -192,7 +192,8 @@ export function mount(container, data = null, opts = {}) {
     }
     const pts = Array.isArray(d.points3d) ? d.points3d.length : 0;
     return {
-      demo: false, chunks, dropped: Math.min(6, dropped), total: pts, freshOn, verifyOn,
+      demo: false, chunks, dropped: Math.max(0, dropped), total: pts, freshOn, verifyOn,
+      llmUsed: !!(d.trace || []).find((s) => s.stage === 'generation')?.data?.llm_used,
       sentences: d.answer?.sentences || [], abstained: !!(d.answer?.abstained ?? d.abstained),
       query: d.config?.query ?? null,
     };
@@ -206,6 +207,7 @@ export function mount(container, data = null, opts = {}) {
     if (sc.verifyOn) keys.push('verify');
     keys.push('answer');
     buildStations(keys);
+    if (!sc.demo) st('llm')?.labelObj.setText(sc.llmUsed ? 'Claude' : 'Generator (offline)');
     flags = sc;
 
     const V = (x, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -216,8 +218,8 @@ export function mount(container, data = null, opts = {}) {
     particles = [];
     const events = (key, t, color, w = 0.7) => { const s = st(key); if (s) s.events.push({ t, color: C(color), w }); };
 
-    const k = Math.min(sc.chunks.length, MAX_CHUNKS - 3);
-    const R = sc.freshOn ? Math.min(sc.dropped, MAX_CHUNKS - k - 2) : 0;
+    const k = Math.min(sc.chunks.length, MAX_CHUNKS);
+    const R = sc.freshOn ? Math.min(6, sc.dropped, Math.max(0, MAX_CHUNKS - k - 2)) : 0;
     const cand = k + R;
     const N = Math.min(MAX_CHUNKS, Math.max(cand + 3, Math.min(sc.total || 0, 16), 8));
     const rnd = (i, s) => { const v = Math.sin(i * 12.9898 + s * 78.233) * 43758.5453; return v - Math.floor(v); };
@@ -352,8 +354,8 @@ export function mount(container, data = null, opts = {}) {
       { t: tIndex - 0.3, text: 'Vektoren landen im Index' },
       { t: tRetr - 0.5, text: `Retrieval: Top-${k} ähnlichste Chunks` },
     ];
-    if (sc.freshOn) phases.push({ t: tFresh - 0.2, text: R ? `Freshness-Filter siebt ${R} veraltete Chunks aus` : 'Freshness-Filter prüft Aktualität' });
-    phases.push({ t: tLLM - 0.2, text: 'LLM erzeugt Antwort aus dem Kontext' });
+    if (sc.freshOn) phases.push({ t: tFresh - 0.2, text: sc.dropped ? `Freshness-Filter siebt ${sc.dropped} veraltete Chunks aus` : 'Freshness-Filter prüft Aktualität' });
+    phases.push({ t: tLLM - 0.2, text: sc.demo ? 'LLM erzeugt Antwort aus dem Kontext' : sc.llmUsed ? 'Claude formuliert aus dem Kontext' : 'Generator übernimmt belegte Sätze aus dem Kontext' });
     if (sc.verifyOn && !abstain) phases.push({ t: tSent + 0.7, text: 'Verifier: belegte Sätze passieren, unbelegte prallen ab' });
     phases = phases.map((p, i) => ({ t: p.t, text: `${i + 1} · ${p.text}` }));
     phases.push({ t: T - 0.5, text: abstain ? 'Antwort: Enthaltung – zu wenig Beleg im Kontext' : 'Fertig: Antwort mit Belegen ✓' });
@@ -362,7 +364,7 @@ export function mount(container, data = null, opts = {}) {
     const staleIn = sc.chunks.filter((c) => c.stale).length;
     const parts = [`${k} Chunks im Kontext`];
     if (staleIn) parts.push(`${staleIn} veraltet ⚠`);
-    if (R) parts.push(`${R} ausgesiebt`);
+    if (sc.dropped) parts.push(`${sc.dropped} ausgesiebt (schematisch)`);
     if (abstain) parts.push('Enthaltung');
     else if (sc.verifyOn) parts.push(`${passed}/${total} Sätze belegt`);
     summaryText = parts.join(' · ');
@@ -449,6 +451,9 @@ export function mount(container, data = null, opts = {}) {
 
   stage.onFrame((dt) => {
     for (const s of stations) if (s.spin && !stage.reducedMotion) s.spin(dt);
+    // A settled diagram conveys the result without an endless conveyor belt
+    // when the learner asks for reduced motion.
+    if (stage.reducedMotion) return;
     let t = stage.time - playStart;
     if (t > T + 3.5 && loop) { play(); t = 0; }
     render(Math.min(t, T + 3.5));
@@ -457,6 +462,10 @@ export function mount(container, data = null, opts = {}) {
   function play() {
     playStart = stage.time;
     lastPhase = -1;
+    if (stage.reducedMotion) {
+      render(T + 0.5);
+      stage.renderOnce();
+    }
   }
 
   function update(newData) {

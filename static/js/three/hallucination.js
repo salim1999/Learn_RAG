@@ -52,13 +52,20 @@ export function normalize(d) {
     });
   } else {
     chunks = (Array.isArray(d.chunks) ? d.chunks : []).map((c, i) => ({ id: String(c.id ?? `c${i + 1}`), title: c.title ?? '', text: c.text ?? '' }));
+    const known = new Set(chunks.map((c) => c.id));
     sentences = (Array.isArray(d.sentences) ? d.sentences : []).map((s, i) => {
       const cits = Array.isArray(s.citations) ? s.citations.map(String) : [];
-      const supported = s.supported ?? (cits.length ? true : null);
-      return { id: String(s.id ?? `s${i + 1}`), text: s.text ?? '', supported, citations: cits.length ? cits : supported ? overlapCitations(s.text, chunks) : [], grounding: s.grounding };
+      const invalidCitations = cits.filter((id) => !known.has(id));
+      // A citation is a pointer, not evidence of entailment. Never invent a
+      // source pillar for a nonexistent pointer or turn an unverified sentence
+      // green merely because it has citation syntax.
+      const supported = invalidCitations.length ? false : s.supported ?? null;
+      return {
+        id: String(s.id ?? `s${i + 1}`), text: s.text ?? '', supported,
+        citations: cits.filter((id) => known.has(id)), invalidCitations,
+        grounding: s.grounding,
+      };
     });
-    const known = new Set(chunks.map((c) => c.id));
-    for (const s of sentences) for (const c of s.citations) if (!known.has(c)) { known.add(c); chunks.push({ id: c, title: '', text: '' }); }
   }
   return { sentences: sentences.slice(0, 10), chunks: chunks.slice(0, 12) };
 }
@@ -149,7 +156,7 @@ export function mount(container, data = null, opts = {}) {
       glow.position.set(x, Y_S, -0.15);
       world.add(glow);
       const b = { s, i, state, mesh, mat, glow, home, text, tag, phase: Math.random() * 10, decay: 0, ps: null };
-      if (state === 'bad') b.ps = makeDust(b, bw);
+      if (state === 'bad' && !stage.reducedMotion) b.ps = makeDust(b, bw);
       blocks.push(b);
 
       // Fäden
@@ -168,7 +175,8 @@ export function mount(container, data = null, opts = {}) {
         const th = { tube, tmat, dot, curve, base: tmat.opacity, ready: false, phase: Math.random(), pillar: p, ok: okThread };
         threads.push(th);
         stage.tween({
-          delay: 0.3 + i * 0.25 + j * 0.1, duration: stage.reducedMotion ? 0.2 : 0.9, ease: Ease.inOutCubic,
+          delay: stage.reducedMotion ? 0 : 0.3 + i * 0.25 + j * 0.1,
+          duration: stage.reducedMotion ? 0.001 : 0.9, ease: Ease.inOutCubic,
           onUpdate: (k) => { if (myGen === gen) setTubeProgress(tube, k); },
           onComplete: () => { if (myGen !== gen) return; th.ready = true; p.lit = 1; },
         });
@@ -232,6 +240,7 @@ export function mount(container, data = null, opts = {}) {
         if (b.state === 'ok') lines.push(`✓ belegt durch: ${b.s.citations.join(', ') || '–'}`);
         else if (b.state === 'bad') lines.push('✗ keine Quelle stützt diesen Satz – Halluzination');
         else lines.push('? noch nicht bewertet');
+        if (b.s.invalidCitations?.length) lines.push(`Ungültige Quellen-IDs: ${b.s.invalidCitations.join(', ')}`);
         if (b.s.grounding != null) lines.push(`Grounding: ${Number(b.s.grounding).toFixed(2)}`);
         return { key: 's' + b.i, title: `Satz S${b.i + 1}`, color: b.state === 'ok' ? COLORS.ok : b.state === 'bad' ? COLORS.error : COLORS.text, lines };
       }
@@ -259,7 +268,7 @@ export function mount(container, data = null, opts = {}) {
         const ph = ((t + b.phase) % PERIOD);
         const decay = rm ? 0.55 : smoothstep(1.5, 6.5, ph) * (1 - smoothstep(8.0, 9.6, ph));
         b.decay = decay;
-        const flicker = rm ? 0.75 : 0.55 + 0.45 * Math.abs(Math.sin(t * 13 + b.phase) * Math.sin(t * 7.3 + b.phase * 2));
+        const flicker = rm ? 0.75 : 0.8 + 0.2 * Math.sin(t * 2 + b.phase);
         b.mat.opacity = Math.max(0.1, (1 - decay * 0.85) * flicker);
         b.mat.emissiveIntensity = 0.3 + flicker * 0.6;
         const s = 1 - decay * 0.7;

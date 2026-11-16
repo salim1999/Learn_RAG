@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from app import config
+from app.code_checks import UnsafeExpression, check_blank
 from app.rag.pipeline import run_pipeline
 
 INT_PARAMS = {"chunking.size", "chunking.overlap", "retrieval.k", "freshness.half_life_days"}
@@ -197,16 +198,24 @@ def grade_code(task: dict, answer: dict):
     given = answer.get("blanks") or {}
     if not isinstance(given, dict):
         raise GradingError("'blanks' muss ein Objekt sein")
+    if len(given) > 20 or any(not isinstance(v, str) for v in given.values()):
+        raise GradingError("Code-Lücken müssen Texte sein (höchstens 20 Lücken)")
     ids = [str(b.get("id")) for b in task.get("blanks") or [] if isinstance(b, dict)] or list(sol_blanks)
-    per, expected = {}, {}
+    per, expected, checks, errors = {}, {}, {}, {}
     for bid in ids:
-        accepted = [normalize_code(a) for a in _as_list(sol_blanks.get(bid))]
-        per[bid] = bool(accepted) and normalize_code(given.get(bid)) in accepted
+        accepted = [str(a) for a in _as_list(sol_blanks.get(bid))]
+        try:
+            per[bid], checks[bid] = check_blank(task, given.get(bid, ""), accepted)
+        except UnsafeExpression as exc:
+            per[bid], checks[bid], errors[bid] = False, 0, str(exc)
         expected[bid] = (_as_list(sol_blanks.get(bid)) or [""])[0]
     score = sum(per.values()) / len(per) if per else 1.0
     fb = ("**Alle Lücken korrekt!**" if score >= 0.999 else
           f"**{sum(per.values())} von {len(per)}** Lücken korrekt.")
-    return score, fb, {"per_blank": per, "expected": expected}
+    if errors:
+        fb += "\n\n" + "\n".join(f"- Lücke {bid}: {message}" for bid, message in errors.items())
+    return score, fb, {"per_blank": per, "expected": expected, "test_cases": checks,
+                       "graded_by": "ast_test_cases", "errors": errors}
 
 
 # --- explain -------------------------------------------------------------------------
@@ -267,6 +276,13 @@ def grade_task(task: dict, answer: Any) -> tuple[float, str, dict]:
     """Bewertet eine (Nicht-Boss-)Aufgabe. score in [0, 1]."""
     if not isinstance(answer, dict):
         raise GradingError("'answer' muss ein Objekt sein")
+    for key in ("selected", "order"):
+        if key in answer and (not isinstance(answer[key], list) or len(answer[key]) > 100 or
+                              any(not isinstance(v, str) for v in answer[key])):
+            raise GradingError(f"'{key}' muss eine Liste von Text-IDs sein (höchstens 100)")
+    for key in ("choice", "reason", "text"):
+        if key in answer and (not isinstance(answer[key], str) or len(answer[key]) > 12000):
+            raise GradingError(f"'{key}' muss ein Text mit höchstens 12000 Zeichen sein")
     fn = GRADERS.get(task.get("type"))
     if fn is None:
         raise GradingError(f"Unbekannter Aufgabentyp: {task.get('type')}")

@@ -13,8 +13,8 @@ router = APIRouter(tags=["agents"])
 
 @router.get("/agents/stream")
 async def agents_stream(
-    query: str = Query(..., description="Frage an das Agenten-System"),
-    max_iterations: int = Query(3, ge=1, le=5),
+    query: str = Query(..., min_length=1, max_length=4000, description="Frage an das Agenten-System"),
+    max_iterations: int = Query(3, ge=1, le=3),
     force_fail_first: bool = Query(False),
     use_llm: bool = Query(False),
 ):
@@ -22,10 +22,10 @@ async def agents_stream(
 
     async def events():
         first = True
-        # Generator ist synchron & schnell (offline); LLM-Aufrufe laufen in einem Thread
+        # Indexbau und SDK-Aufrufe blockieren nie den ASGI-Event-Loop.
         gen = run_agents(query, max_iterations, force_fail_first, use_llm)
         while True:
-            evt = await asyncio.to_thread(next, gen, None) if use_llm else next(gen, None)
+            evt = await asyncio.to_thread(next, gen, None)
             if evt is None:
                 break
             if not first and delay > 0:

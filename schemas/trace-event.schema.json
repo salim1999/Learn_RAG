@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RAG Academy SSE trace event",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "type",
+        "agent",
+        "iteration",
+        "status",
+        "message",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "step"
+        },
+        "agent": {
+          "enum": [
+            "planner",
+            "retriever",
+            "generator",
+            "verifier",
+            "orchestrator"
+          ]
+        },
+        "iteration": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "status": {
+          "enum": [
+            "start",
+            "done",
+            "fail",
+            "retry"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "type",
+        "answer",
+        "abstained",
+        "iterations",
+        "chunks"
+      ],
+      "properties": {
+        "type": {
+          "const": "final"
+        },
+        "answer": {
+          "type": "object",
+          "required": [
+            "text",
+            "abstained",
+            "sentences"
+          ]
+        },
+        "abstained": {
+          "type": "boolean"
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "chunks": {
+          "type": "array"
+        }
+      }
+    }
+  ]
+}

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from typing import Any
 
@@ -102,6 +103,8 @@ def _call_json(system: str, user: str, schema: dict) -> Any | None:
         log.warning("anthropic-Paket nicht installiert")
         return None
 
+    client = None
+
     def _create(with_format: bool):
         output_config: dict[str, Any] = {"effort": "low"}
         if with_format:
@@ -109,7 +112,7 @@ def _call_json(system: str, user: str, schema: dict) -> Any | None:
         sys_prompt = system if with_format else (
             system + "\n\nAntworte ausschließlich mit einem JSON-Objekt nach diesem Schema:\n"
             + json.dumps(schema, ensure_ascii=False))
-        return _client().beta.messages.create(
+        return client.beta.messages.create(
             model=config.MODEL,
             max_tokens=MAX_TOKENS,
             betas=[FALLBACK_BETA],
@@ -121,6 +124,7 @@ def _call_json(system: str, user: str, schema: dict) -> Any | None:
         )
 
     try:
+        client = _client()
         try:
             response = _create(with_format=True)
         except anthropic.BadRequestError as exc:
@@ -136,12 +140,29 @@ def _call_json(system: str, user: str, schema: dict) -> Any | None:
     except anthropic.APIConnectionError as exc:
         log.warning("Claude nicht erreichbar: %s", exc)
         return None
+    except (TypeError, AttributeError, ValueError) as exc:
+        # Beispielsweise ein inkompatibles SDK oder eine ungültige SDK-Antwort.
+        # Ein gesetzter Key darf die Offline-fähige Lern-App nie unbenutzbar machen.
+        log.warning("Claude-Aufruf konnte nicht verarbeitet werden: %s", type(exc).__name__)
+        return None
+    finally:
+        if client is not None:
+            client.close()
 
-    if response.stop_reason == "refusal":
+    if getattr(response, "stop_reason", None) == "refusal":
         details = getattr(response, "stop_details", None)
         log.warning("Claude hat abgelehnt (Kategorie: %s)", getattr(details, "category", None))
         return None
-    text = "".join(getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text")
+    if getattr(response, "stop_reason", None) not in ("end_turn", "stop_sequence"):
+        log.warning("Claude-Antwort unvollständig (stop_reason=%s)", getattr(response, "stop_reason", None))
+        return None
+    blocks = getattr(response, "content", None)
+    if not isinstance(blocks, (list, tuple)):
+        return None
+    texts = [getattr(b, "text", None) for b in blocks if getattr(b, "type", "") == "text"]
+    if any(not isinstance(value, str) for value in texts):
+        return None
+    text = "".join(texts)
     data = _extract_json(text)
     if data is None:
         log.warning("Claude-Antwort war kein gültiges JSON (stop_reason=%s)", response.stop_reason)
@@ -162,14 +183,19 @@ def generate_grounded_answer(query: str, chunks: list[dict]) -> dict | None:
     """→ {"abstained": bool, "sentences": [{"text", "citations"}]} oder None."""
     user = f"<kontext>\n{_format_chunks(chunks)}\n</kontext>\n\n<frage>{query}</frage>"
     data = _call_json(ANSWER_SYSTEM, user, ANSWER_SCHEMA)
-    if not isinstance(data, dict) or not isinstance(data.get("sentences", []), list):
+    if (not isinstance(data, dict) or not isinstance(data.get("sentences", []), list)
+            or not isinstance(data.get("abstained"), bool)):
         return None
     sentences = []
     for s in data.get("sentences") or []:
-        if isinstance(s, dict) and str(s.get("text", "")).strip():
+        if not isinstance(s, dict) or not isinstance(s.get("text"), str):
+            return None
+        if s["text"].strip():
             cites = s.get("citations") or []
+            if not isinstance(cites, list) or any(not isinstance(c, str) for c in cites):
+                return None
             sentences.append({"text": str(s["text"]).strip(),
-                              "citations": [str(c) for c in cites if isinstance(c, (str, int))]})
+                              "citations": list(dict.fromkeys(cites))})
     return {"abstained": bool(data.get("abstained")) or not sentences, "sentences": sentences}
 
 
@@ -184,9 +210,14 @@ def grade_explanation(question: str, rubric: list[dict], model_answer: str, text
     if not isinstance(data, dict):
         return None
     try:
-        score = max(0.0, min(1.0, float(data.get("score", 0))))
+        score = float(data.get("score", 0))
     except (TypeError, ValueError):
         return None
-    hits = [h for h in data.get("hits", []) if h in concepts]
+    if not math.isfinite(score) or not isinstance(data.get("hits"), list):
+        return None
+    hits = [concept for concept in concepts if concept in data["hits"]]
     misses = [m for m in concepts if m not in hits]
+    # Konzeptliste ist maßgeblich; ein widersprüchliches numerisches Modellurteil
+    # kann keine vollen Punkte ohne ein einziges erkanntes Konzept vergeben.
+    score = len(hits) / len(concepts) if concepts else max(0.0, min(1.0, score))
     return {"score": score, "hits": hits, "misses": misses, "feedback": str(data.get("feedback", ""))}

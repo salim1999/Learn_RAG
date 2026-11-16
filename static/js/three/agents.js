@@ -137,6 +137,7 @@ export function mount(container, data = null, opts = {}) {
   function addFx(obj, update) { const f = { obj, update, t0: stage.time, dead: false }; fx.push(f); return f; }
 
   function comet(curve, color, dur) {
+    if (stage.reducedMotion) return Promise.resolve();
     return new Promise((resolve) => {
       const head = createGlowSprite(glowTex, color, 0.55, 1);
       const core = createGlowSprite(glowTex, '#ffffff', 0.2, 1);
@@ -176,6 +177,7 @@ export function mount(container, data = null, opts = {}) {
   }
 
   function lightning(node) {
+    if (stage.reducedMotion) return;
     const N = 9;
     const geo = new THREE.BufferGeometry();
     const arr = new Float32Array(N * 3);
@@ -210,6 +212,7 @@ export function mount(container, data = null, opts = {}) {
   }
 
   function burst(pos, color, count = 90) {
+    if (stage.reducedMotion) return;
     const geo = new THREE.BufferGeometry();
     const arr = new Float32Array(count * 3);
     const vel = new Float32Array(count * 3);
@@ -250,7 +253,7 @@ export function mount(container, data = null, opts = {}) {
   function setIteration(n) {
     iteration = n;
     iterLabel.setText(`Iteration ${n}${maxIter ? ` / ${maxIter}` : ''}`);
-    iterLabel.element.animate?.([{ transform: 'scale(1.35)', color: COLORS.stale }, { transform: 'scale(1)', color: '#ffffff' }], { duration: 600 });
+    if (!stage.reducedMotion) iterLabel.element.animate?.([{ transform: 'scale(1.35)', color: COLORS.stale }, { transform: 'scale(1)', color: '#ffffff' }], { duration: 600 });
   }
   function setActive(key) { for (const k of ORDER) nodes[k].activeTarget = k === key ? 1 : 0; }
   function flash(node, color, amount = 1) { node.flash = amount; node.flashColor.set(color); node.ringT = 0; }
@@ -415,7 +418,7 @@ export function mount(container, data = null, opts = {}) {
       n.active += (n.activeTarget - n.active) * Math.min(1, dt * 6);
       n.flash = Math.max(0, n.flash - dt * 1.6);
       const pulse = rm ? 0 : Math.sin(t * 6) * 0.5 + 0.5;
-      const s = 1 + n.active * (0.12 + 0.1 * pulse) + n.flash * 0.15;
+      const s = rm ? 1 : 1 + n.active * (0.12 + 0.1 * pulse) + n.flash * 0.15;
       n.mesh.scale.setScalar(s);
       if (!rm) { n.mesh.rotation.y += dt * (0.3 + n.active * 1.5); n.mesh.rotation.x += dt * 0.15; }
       n.mat.emissiveIntensity = 0.3 + n.active * 0.6 + n.flash * 0.8;
@@ -423,7 +426,8 @@ export function mount(container, data = null, opts = {}) {
       n.glow.material.opacity = 0.15 + n.active * 0.35 + n.flash * 0.5;
       n.glow.scale.setScalar(1.8 + n.active * 0.4 + n.flash * 0.6);
       // Puls-Ring
-      if (n.ringT >= 0) {
+      if (rm) { n.ringT = -1; n.ring.material.opacity = 0; }
+      else if (n.ringT >= 0) {
         n.ringT += dt;
         const k = n.ringT / 0.8;
         if (k >= 1) { n.ringT = n.active > 0.5 && !rm ? 0 : -1; n.ring.material.opacity = 0; }
@@ -431,7 +435,7 @@ export function mount(container, data = null, opts = {}) {
       }
     }
     // Loop-Pfeil
-    loopShown += (loopVisible - loopShown) * Math.min(1, dt * 3);
+    loopShown = rm ? loopVisible : loopShown + (loopVisible - loopShown) * Math.min(1, dt * 3);
     loopFlash = Math.max(0, loopFlash - dt * 0.8);
     setTubeProgress(loopTube, loopShown);
     loopCone.visible = loopShown > 0.95;

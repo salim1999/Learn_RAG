@@ -36,6 +36,7 @@ export function initHud(root) {
       type: 'button',
       'aria-expanded': String(badgesOpen),
       'aria-controls': 'badge-panel',
+      'aria-label': `${badges.length} Abzeichen anzeigen`,
       onclick: () => { badgesOpen = !badgesOpen; render(); },
       title: 'Abzeichen anzeigen',
     },

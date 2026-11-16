@@ -30,9 +30,10 @@ export function render(container, task, ctx) {
           h('strong', d.title),
           h('span.doc-tl-meta', [d.source, d.version ? `Version ${d.version}` : null].filter(Boolean).join(', '))),
         h('p.doc-tl-text', d.text)));
-    card.addEventListener('mouseenter', () => scene.then((s) => s.update && s.update({
-      documents: docs.map((x) => ({ id: x.id, title: x.title, date: x.date, superseded_by: x.superseded_by ?? null })), as_of: asOf, highlight: d.id,
-    })));
+    const highlight = () => scene.then((s) => s.highlight?.(d.id));
+    card.tabIndex = 0;
+    card.addEventListener('mouseenter', highlight);
+    card.addEventListener('focusin', highlight);
     docCards.set(d.id, card);
     strip.appendChild(card);
   }

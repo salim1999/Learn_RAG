@@ -27,7 +27,7 @@
     },
     {
       "heading": "Generierungs-Metriken (RAGAS-Konzepte)",
-      "body_md": "Frameworks wie **RAGAS** haben eine Reihe referenzfreier Metriken populär gemacht, die meist per LLM berechnet werden:\n\n- **Faithfulness:** Anteil der Claims der Antwort, die durch den Kontext gedeckt sind (Level 7).\n- **Answer Relevance:** Beantwortet die Antwort die *gestellte* Frage? (Eine treue, aber am Thema vorbeigehende Antwort ist nutzlos.)\n- **Context Precision:** Stehen die relevanten Chunks im Kontext *weit oben*? (rangsensitiv)\n- **Context Recall:** Sind alle Fakten der Referenzantwort im Kontext enthalten? (braucht eine Referenzantwort)\n\nDazu kommen für unser Thema:\n- **Freshness-Score:** Anteil der Kontext-Chunks, die zum Stichtag gültig sind.\n- **Abstain-Korrektheit:** Lehnt das System bei unbeantwortbaren Fragen ab – und *nur* dort?\n\nDie Metriken trennen sauber: Liegt der Fehler im **Retrieval** (Context Recall niedrig) oder in der **Generierung** (Faithfulness niedrig)?",
+      "body_md": "Frameworks wie **RAGAS** haben eine Reihe referenzfreier Metriken populär gemacht, die meist per LLM berechnet werden:\n\n- **Faithfulness:** Anteil der Claims der Antwort, die durch den Kontext gedeckt sind (Level 7).\n- **Answer Relevance:** Beantwortet die Antwort die *gestellte* Frage? (Eine treue, aber am Thema vorbeigehende Antwort ist nutzlos.)\n- **Context Precision:** Stehen die relevanten Chunks im Kontext *weit oben*? (rangsensitiv)\n- **Context Recall:** Sind alle Fakten der Referenzantwort im Kontext enthalten? (braucht eine Referenzantwort)\n\nDazu kommen für unser Thema:\n- **Freshness-Score:** Anteil der Kontext-Chunks, die zum Stichtag gültig sind.\n- **Abstain-Korrektheit:** Lehnt das System bei unbeantwortbaren Fragen ab – und *nur* dort?\n\nDie Metriken trennen sauber: Liegt der Fehler im **Retrieval** (Context Recall niedrig) oder in der **Generierung** (Faithfulness niedrig)?\n\n**In dieser Mini-Engine:** Die Werte sind deterministische Lehr-Heuristiken, keine vollständige RAGAS-Evaluation. Grounding verwendet Wort-/Zahlenabgleich, Answer Relevance lexikalische Überschneidung und Context Precision einen einfachen Relevanzanteil. Diese Näherungen können Negationen, semantische Widersprüche und unbeantwortete Teilfragen übersehen. Für Produktion braucht es Referenzen, menschliche Stichproben und kalibrierte Claim-Prüfung.",
       "key_points": [
         "Faithfulness, Answer Relevance, Context Precision/Recall.",
         "Freshness und Abstain-Korrektheit ergänzen.",
@@ -52,7 +52,7 @@
       "type": "code",
       "title": "Recall@k",
       "prompt": "Implementiere Recall@k.",
-      "xp": 30,
+      "xp": 50,
       "difficulty": 2,
       "explanation": "Recall teilt durch die Anzahl der **relevanten** Dokumente (Precision würde durch *k* teilen).",
       "language": "python",
@@ -124,7 +124,7 @@
       "type": "tune",
       "title": "Zwei Fragen in einer",
       "prompt": "Frage: **„Was kostet der Business-Plan und welche Verfügbarkeit ist dafür im SLA zugesagt?“** Die Antwort braucht **zwei** Dokumente (Preisblatt und SLA). Ersetzte Versionen werden bereits gefiltert. Wähle *k* so, dass beide im Kontext sind.",
-      "xp": 40,
+      "xp": 60,
       "difficulty": 2,
       "explanation": "Bei mehrteiligen Fragen konkurrieren die Teilthemen um wenige Plätze; oft belegt ein Teil (hier häufig der Preisteil mit mehreren Chunks) die oberen Ränge. Ein größeres *k* stellt sicher, dass beide Dokumente dabei sind. Eleganter wäre Query-Decomposition (Level 11): zwei Teilfragen, je eigenes Retrieval.",
       "hint": "Zwei Teilthemen brauchen Platz.",
@@ -188,7 +188,7 @@
       "type": "better",
       "title": "Wer bewertet?",
       "prompt": "Was wäre besser?",
-      "xp": 30,
+      "xp": 40,
       "difficulty": 2,
       "explanation": "Siehe *LLM-as-Judge und seine Fallstricke*.",
       "scenario": "Du willst wöchentlich 500 Antworten auf Faithfulness bewerten. Das Antwortmodell ist nova-3.",
@@ -203,64 +203,6 @@
       "solution": {
         "correct": "b",
         "why": "**B** reduziert Self-Preference-Bias und macht die Qualität des Richters **messbar**. Ohne Kalibrierung weißt du nicht, ob eine Faithfulness von 0,92 gut ist oder der Richter nur großzügig.\n\n*Trade-off:* Kalibrierung kostet einmalig menschliche Arbeit, und ein zweites Modell kostet laufend Geld. Selbstbewertung ist nicht wertlos – für schnelle Vorab-Checks taugt sie –, aber für Entscheidungen („Release ja/nein“) reicht sie nicht."
-      }
-    },
-    {
-      "id": "l10t05",
-      "type": "explain",
-      "title": "Richter mit Schwächen",
-      "prompt": "Erkläre kurz.",
-      "xp": 40,
-      "difficulty": 2,
-      "explanation": "Siehe *LLM-as-Judge und seine Fallstricke*.",
-      "question": "Nenne mindestens drei typische Fallstricke von LLM-as-Judge und je eine Gegenmaßnahme.",
-      "solution": {
-        "rubric": [
-          {
-            "concept": "Positions-Bias / Reihenfolge-Effekt",
-            "keywords": [
-              "position",
-              "reihenfolge",
-              "zuerst",
-              "erste antwort",
-              "order"
-            ]
-          },
-          {
-            "concept": "Längen-Bias / längere Antworten bevorzugt",
-            "keywords": [
-              "länge",
-              "länger",
-              "ausführlich",
-              "verbos",
-              "wortreich"
-            ]
-          },
-          {
-            "concept": "Self-Preference / eigenes Modell bevorzugt",
-            "keywords": [
-              "self",
-              "eigene",
-              "selbst",
-              "gleiche modell",
-              "modellfamilie"
-            ]
-          },
-          {
-            "concept": "Kalibrierung gegen menschliche Labels / Rubrik",
-            "keywords": [
-              "kalibr",
-              "mensch",
-              "label",
-              "rubrik",
-              "kappa",
-              "übereinstimm",
-              "referenz"
-            ]
-          }
-        ],
-        "model_answer": "1. **Positions-Bias:** Der Richter bevorzugt die zuerst gezeigte Antwort. → Reihenfolge tauschen und beide Urteile mitteln.\n2. **Längen-Bias:** Längere Antworten wirken besser. → Konkrete Rubrik, Länge explizit als irrelevant markieren.\n3. **Self-Preference:** Modelle bewerten Texte der eigenen Familie besser. → Anderes Modell als Richter.\n4. **Fehlendes Wissen:** Der Richter erkennt veraltete Fakten nicht. → Kontext und Referenzantwort mitgeben.\n\nÜbergreifend: Den Richter an von Menschen gelabelten Fällen **kalibrieren** und die Übereinstimmung messen.",
-        "pass_ratio": 0.6
       }
     },
     {
@@ -313,7 +255,7 @@
       "type": "boss",
       "title": "Boss: Der Metrik-Minotaurus",
       "prompt": "Im Labyrinth der Zahlen lauert der Minotaurus. Lass dich nicht von Durchschnittswerten täuschen.",
-      "xp": 100,
+      "xp": 60,
       "difficulty": 3,
       "explanation": "Der Minotaurus ist besiegt: Du misst das Richtige, nicht nur das Bequeme.",
       "story": "Das Team meldet stolz: „Faithfulness 0,95!“ Trotzdem häufen sich Beschwerden über falsche Preise und Antworten auf Fragen, die gar nicht beantwortbar sind. Finde heraus, was die Evaluation übersieht.",
@@ -405,6 +347,64 @@
           "solution": {
             "correct": "b",
             "why": "**B** testet genau die Fehlerklassen, die das Team übersieht: Abstain und Freshness. Mehr gleichartige Fragen stabilisieren nur eine Zahl, die das Problem nicht abbildet. *Trade-off:* Kategorien mit 30 Fragen haben breitere Konfidenzintervalle; einzelne Ausreißer wiegen schwer – deshalb Einzelfälle ansehen."
+          }
+        },
+        {
+          "id": "l10t07s4",
+          "type": "explain",
+          "title": "Richter mit Schwächen",
+          "prompt": "Erkläre kurz.",
+          "xp": 40,
+          "difficulty": 2,
+          "explanation": "Siehe *LLM-as-Judge und seine Fallstricke*.",
+          "question": "Nenne mindestens drei typische Fallstricke von LLM-as-Judge und je eine Gegenmaßnahme.",
+          "solution": {
+            "rubric": [
+              {
+                "concept": "Positions-Bias / Reihenfolge-Effekt",
+                "keywords": [
+                  "position",
+                  "reihenfolge",
+                  "zuerst",
+                  "erste antwort",
+                  "order"
+                ]
+              },
+              {
+                "concept": "Längen-Bias / längere Antworten bevorzugt",
+                "keywords": [
+                  "länge",
+                  "länger",
+                  "ausführlich",
+                  "verbos",
+                  "wortreich"
+                ]
+              },
+              {
+                "concept": "Self-Preference / eigenes Modell bevorzugt",
+                "keywords": [
+                  "self",
+                  "eigene",
+                  "selbst",
+                  "gleiche modell",
+                  "modellfamilie"
+                ]
+              },
+              {
+                "concept": "Kalibrierung gegen menschliche Labels / Rubrik",
+                "keywords": [
+                  "kalibr",
+                  "mensch",
+                  "label",
+                  "rubrik",
+                  "kappa",
+                  "übereinstimm",
+                  "referenz"
+                ]
+              }
+            ],
+            "model_answer": "1. **Positions-Bias:** Der Richter bevorzugt die zuerst gezeigte Antwort. → Reihenfolge tauschen und beide Urteile mitteln.\n2. **Längen-Bias:** Längere Antworten wirken besser. → Konkrete Rubrik, Länge explizit als irrelevant markieren.\n3. **Self-Preference:** Modelle bewerten Texte der eigenen Familie besser. → Anderes Modell als Richter.\n4. **Fehlendes Wissen:** Der Richter erkennt veraltete Fakten nicht. → Kontext und Referenzantwort mitgeben.\n\nÜbergreifend: Den Richter an von Menschen gelabelten Fällen **kalibrieren** und die Übereinstimmung messen.",
+            "pass_ratio": 0.6
           }
         }
       ]

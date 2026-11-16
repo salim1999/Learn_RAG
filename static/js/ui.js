@@ -2,10 +2,10 @@
 
 let markedParse = null;
 
-/** Lädt marked als ES-Modul vom CDN; ohne Netz wird ein einfacher Fallback benutzt. */
+/** Lokaler Markdown-Parser; ein einfacher Fallback bleibt bei Ladefehlern verfügbar. */
 export async function initMarkdown() {
   try {
-    const mod = await import('https://cdn.jsdelivr.net/npm/marked@12.0.2/lib/marked.esm.js');
+    const mod = await import('/static/vendor/marked/marked.esm.js');
     const marked = mod.marked || mod.default;
     marked.setOptions({ gfm: true, breaks: false });
     markedParse = (s) => marked.parse(s);
@@ -36,10 +36,47 @@ function fallbackMarkdown(md) {
 export function renderMarkdown(md) {
   if (md == null || md === '') return '';
   try {
-    return markedParse ? markedParse(String(md)) : fallbackMarkdown(md);
+    return sanitizeMarkdown(markedParse ? markedParse(String(md)) : fallbackMarkdown(md));
   } catch {
     return fallbackMarkdown(md);
   }
+}
+
+// Auch Online-Feedback und Freitext sind Daten. Nur Markdown-Elemente zulassen;
+// Ereignishandler, aktives HTML und ausführbare Link-Protokolle werden entfernt.
+const MARKDOWN_TAGS = new Set(('p br hr strong em del code pre blockquote ul ol li '
+  + 'h1 h2 h3 h4 h5 h6 table thead tbody tfoot tr th td a span').split(' '));
+const DROP_TAGS = new Set(('script style iframe object embed svg math template '
+  + 'link meta base form input button textarea select img audio video source').split(' '));
+
+function sanitizeMarkdown(html) {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  function clean(parent) {
+    for (const node of [...parent.childNodes]) {
+      if (node.nodeType === Node.COMMENT_NODE) { node.remove(); continue; }
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+      const tag = node.localName;
+      if (DROP_TAGS.has(tag)) { node.remove(); continue; }
+      clean(node);
+      if (!MARKDOWN_TAGS.has(tag)) { node.replaceWith(...node.childNodes); continue; }
+      for (const attr of [...node.attributes]) {
+        const allowed = (tag === 'a' && ['href', 'title'].includes(attr.name))
+          || (tag === 'code' && attr.name === 'class' && /^language-[\w-]+$/.test(attr.value))
+          || (tag === 'ol' && attr.name === 'start' && /^\d+$/.test(attr.value));
+        if (!allowed) node.removeAttribute(attr.name);
+      }
+      if (tag === 'a' && node.hasAttribute('href')) {
+        const href = node.getAttribute('href');
+        try {
+          const url = new URL(href, window.location.href);
+          if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) node.removeAttribute('href');
+        } catch { node.removeAttribute('href'); }
+      }
+    }
+  }
+  clean(template.content);
+  return template.innerHTML;
 }
 
 /** Element-Helfer: h('div.card#id', {attrs}, ...children) */
@@ -62,12 +99,24 @@ export function h(sel, attrs, ...children) {
     if (k === 'class') node.className += (node.className ? ' ' : '') + v;
     else if (k === 'html') node.innerHTML = v;
     else if (k === 'text') node.textContent = v;
-    else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+    else if (k === 'style' && typeof v === 'object') {
+      for (const [property, value] of Object.entries(v)) {
+        if (value == null) continue;
+        if (property.startsWith('--') || property.includes('-')) node.style.setProperty(property, String(value));
+        else node.style[property] = value;
+      }
+    }
     else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === 'dataset') Object.assign(node.dataset, v);
     else if (v === true) node.setAttribute(k, '');
     else node.setAttribute(k, v);
   }
+  appendChildren(node, children);
+  return node;
+}
+
+/** Native append() würde null als sichtbaren Text einfügen. */
+export function append(node, ...children) {
   appendChildren(node, children);
   return node;
 }

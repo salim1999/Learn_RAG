@@ -1,7 +1,7 @@
 // RAG Academy – Wissensbasis-Browser (#/corpus): Zeitachse + Filter + Dokument-Details
 
 import { api } from './api.js';
-import { h, clear, loadingBlock, errorBlock, mountScene, fmtDate } from './ui.js';
+import { append, h, clear, loadingBlock, errorBlock, mountScene, fmtDate } from './ui.js';
 
 export async function viewCorpus(root, params, { alive }) {
   root.appendChild(loadingBlock('Wissensbasis wird geladen …'));
@@ -134,7 +134,7 @@ export async function viewCorpus(root, params, { alive }) {
     }
     clear(detail);
     const ch = chain(d);
-    detail.append(
+    append(detail,
       h('div.detail-head',
         h('span.detail-id', d.id),
         h('h2', d.title),

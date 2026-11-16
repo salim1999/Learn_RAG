@@ -1,6 +1,6 @@
 // Aufgabentyp „tune“ – Pipeline-Parameter per Slider einstellen, bis die Ziel-Metrik erreicht ist
 
-import { h, fmtNum, metricLabel, metricValue } from '../ui.js';
+import { append, h, fmtNum, metricLabel, metricValue } from '../ui.js';
 import { renderTrace, renderMetrics, renderChunks } from '../ragview.js';
 
 let uid = 0;
@@ -65,14 +65,16 @@ export function render(container, task, ctx) {
       return { params: { ...values } };
     },
     showResult(result) {
-      inputs.forEach((i) => { i.disabled = true; });
+      inputs.forEach((i) => { i.disabled = !!result.correct; });
+      ctx.onReady(!result.correct);
+      if (scene) { scene.then((s) => s.dispose()); scene = null; }
       const d = result.details || {};
       const thr = Number(target.threshold) || 0;
       const v = Number(d.metric_value) || 0;
       const reached = v >= thr;
       const scaleMax = Math.max(1, v, thr);
       resultBox.innerHTML = '';
-      resultBox.append(
+      append(resultBox,
         h('div', { class: `target-gauge ${reached ? 'is-reached' : 'is-missed'}` },
           h('div.gauge-row',
             h('span', target.label || metricLabel(target.metric)),
@@ -83,7 +85,7 @@ export function render(container, task, ctx) {
         d.metrics ? renderMetrics(d.metrics) : null);
       const run = d.run;
       if (run) {
-        resultBox.append(
+        append(resultBox,
           h('h3', 'Mini-Trace deines Laufs'),
           renderTrace(run.trace, { compact: true }),
           h('details.tune-chunks', h('summary', `Abgerufene Chunks (${(run.chunks || []).length})`), renderChunks(run.chunks, { compact: true })));
